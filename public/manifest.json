@@ -1,0 +1,36 @@
+{
+  "name": "ProjectFlow - 项目管理",
+  "short_name": "ProjectFlow",
+  "description": "现代化项目管理工具，支持看板、甘特图、团队协作",
+  "start_url": "/项目管理/",
+  "display": "standalone",
+  "background_color": "#f5f5f7",
+  "theme_color": "#0071e3",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "business"],
+  "shortcuts": [
+    {
+      "name": "看板",
+      "url": "/项目管理/#/kanban",
+      "description": "查看任务看板"
+    },
+    {
+      "name": "项目",
+      "url": "/项目管理/#/projects",
+      "description": "管理项目列表"
+    },
+    {
+      "name": "团队",
+      "url": "/项目管理/#/team",
+      "description": "团队成员管理"
+    }
+  ]
+}
