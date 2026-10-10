@@ -171,3 +171,70 @@ export const useTasksStore = defineStore('tasks', () => {
 
   return { columns, tasks, byProject, byCol, add, update, remove, move }
 })
+
+/* ============ 认证 ============ */
+const ACC_KEY = 'pf_accounts'
+const SES_KEY = 'pf_session'
+
+function loadAccounts() {
+  try {
+    const list = JSON.parse(localStorage.getItem(ACC_KEY) || '[]')
+    if (!list.length) {
+      // 预置演示账号 demo@demo.com / 123456
+      const demo = { id: 'u1', name: '林青川', email: 'demo@demo.com', pass: btoa('123456'), avatar: 'https://api.dicebear.com/9.x/notionists/svg?seed=lin' }
+      list.push(demo)
+      localStorage.setItem(ACC_KEY, JSON.stringify(list))
+    }
+    return list
+  } catch {
+    return []
+  }
+}
+
+export const useAuthStore = defineStore('auth', () => {
+  const session = ref(JSON.parse(localStorage.getItem(SES_KEY) || 'null'))
+  const accounts = ref(loadAccounts())
+
+  const isAuthed = computed(() => !!session.value)
+
+  function persist() {
+    localStorage.setItem(ACC_KEY, JSON.stringify(accounts.value))
+    if (session.value) localStorage.setItem(SES_KEY, JSON.stringify(session.value))
+    else localStorage.removeItem(SES_KEY)
+  }
+
+  function register(name, email, password) {
+    email = (email || '').trim().toLowerCase()
+    if (!name || !email || !password) return { ok: false, msg: '请填写完整信息' }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, msg: '邮箱格式不正确' }
+    if (password.length < 6) return { ok: false, msg: '密码至少 6 位' }
+    if (accounts.value.some((a) => a.email === email)) return { ok: false, msg: '该邮箱已注册' }
+    const acc = {
+      id: 'u' + Date.now(),
+      name: name.trim(),
+      email,
+      pass: btoa(password),
+      avatar: `https://api.dicebear.com/9.x/notionists/svg?seed=${encodeURIComponent(email)}`
+    }
+    accounts.value.push(acc)
+    session.value = { id: acc.id, name: acc.name, email: acc.email, avatar: acc.avatar }
+    persist()
+    return { ok: true }
+  }
+
+  function login(email, password) {
+    email = (email || '').trim().toLowerCase()
+    const acc = accounts.value.find((a) => a.email === email)
+    if (!acc || acc.pass !== btoa(password)) return { ok: false, msg: '邮箱或密码错误' }
+    session.value = { id: acc.id, name: acc.name, email: acc.email, avatar: acc.avatar }
+    persist()
+    return { ok: true }
+  }
+
+  function logout() {
+    session.value = null
+    persist()
+  }
+
+  return { session, isAuthed, register, login, logout }
+})

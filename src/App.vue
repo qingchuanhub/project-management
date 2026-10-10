@@ -6,11 +6,11 @@ import {
   Users, BarChart3, Settings, Search, Bell, Sun, Moon,
   Menu, X, Plus, LogOut, User as UserIcon, ChevronLeft, ChevronRight
 } from 'lucide-vue-next'
-import { useUsersStore } from './store'
+import { useAuthStore } from './store'
 
 const route = useRoute()
 const router = useRouter()
-const users = useUsersStore()
+const auth = useAuthStore()
 
 const collapsed = ref(false)
 const mobileOpen = ref(false)
@@ -40,15 +40,24 @@ watch(() => route.path, () => {
   showUser.value = false
 })
 
-const me = () => users.get('1')
+const me = () =>
+  auth.session || { name: '未登录', email: '', avatar: 'https://api.dicebear.com/9.x/notionists/svg?seed=guest' }
 
 function doSearch() {
   if (searchQ.value.trim()) router.push('/projects')
 }
+
+function logout() {
+  auth.logout()
+  router.push('/login')
+}
 </script>
 
 <template>
-  <div class="app" :class="{ collapsed }">
+  <div v-if="route.path === '/login'">
+    <router-view />
+  </div>
+  <div v-else class="app" :class="{ collapsed }">
     <!-- 侧边栏 -->
     <aside class="sidebar glass-strong" :class="{ open: mobileOpen }">
       <div class="side-head">
@@ -140,7 +149,7 @@ function doSearch() {
                 <button class="pop-item"><UserIcon :size="15" /> 个人资料</button>
                 <router-link to="/settings" class="pop-item"><Settings :size="15" /> 设置</router-link>
                 <hr class="hr" />
-                <button class="pop-item danger"><LogOut :size="15" /> 退出登录</button>
+                <button class="pop-item danger" @click="logout"><LogOut :size="15" /> 退出登录</button>
               </div>
             </transition>
           </div>

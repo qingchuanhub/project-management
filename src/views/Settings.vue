@@ -3,10 +3,10 @@ import { ref, computed, watch } from 'vue'
 import {
   User, Bell, Palette, Shield, Database, Save, Download, Trash2, Check
 } from 'lucide-vue-next'
-import { useUsersStore } from '../store'
+import { useAuthStore } from '../store'
 
-const usersStore = useUsersStore()
-const me = computed(() => usersStore.get('1'))
+const auth = useAuthStore()
+const me = computed(() => auth.session || { name: '未登录', email: '', avatar: '' })
 
 const tab = ref('profile')
 const tabs = [
@@ -18,8 +18,8 @@ const tabs = [
 ]
 
 const profile = ref({
-  name: '林青川',
-  email: 'qingchuan@team.com',
+  name: (auth.session && auth.session.name) || '林青川',
+  email: (auth.session && auth.session.email) || 'qingchuan@team.com',
   bio: '产品与工程的交叉点，热爱构建优雅的界面。',
   timezone: 'Asia/Shanghai (UTC+8)'
 })
