@@ -1,398 +1,242 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { useUserStore } from '@/stores/user'
-import { useProjectStore } from '@/stores/project'
-import { Plus, Search, Mail, MessageSquare, MoreVertical, UserPlus, Settings } from 'lucide-vue-next'
-import { ElDialog, ElForm, ElFormItem, ElInput, ElSelect, ElOption, ElButton, ElAvatar, ElTag, ElDropdown, ElDropdownMenu, ElDropdownItem } from 'element-plus'
+import { Search, Plus, Mail, MessageSquare, MoreHorizontal, UserPlus } from 'lucide-vue-next'
+import Modal from '../components/Modal.vue'
+import { useUsersStore, useProjectsStore } from '../store'
 
-const userStore = useUserStore()
-const projectStore = useProjectStore()
+const usersStore = useUsersStore()
+const projects = useProjectsStore()
 
-const searchQuery = ref('')
-const viewMode = ref('grid')
-const showInviteDialog = ref(false)
-const inviteForm = ref({ email: '', role: 'member', projects: [] })
+const q = ref('')
+const view = ref('grid')
+const showInvite = ref(false)
+const invite = ref({ email: '', role: 'member', projects: [] })
 
-const filteredUsers = computed(() => {
-  if (!searchQuery.value) return userStore.users
-  const query = searchQuery.value.toLowerCase()
-  return userStore.users.filter(u =>
-    u.name.toLowerCase().includes(query) ||
-    u.email.toLowerCase().includes(query)
-  )
+const statusMap = {
+  online: { text: '在线', color: '#30d158' },
+  away: { text: '离开', color: '#ff9f0a' },
+  busy: { text: '忙碌', color: '#ff453a' },
+  offline: { text: '离线', color: '#86868b' }
+}
+
+const list = computed(() => {
+  if (!q.value.trim()) return usersStore.users
+  const s = q.value.toLowerCase()
+  return usersStore.users.filter((u) => u.name.toLowerCase().includes(s) || u.email.toLowerCase().includes(s))
 })
 
-const roles = [
-  { value: 'admin', label: '管理员' },
-  { value: 'member', label: '成员' },
-  { value: 'viewer', label: '查看者' }
-]
+const roleText = (r) => (r === 'admin' ? '管理员' : '成员')
+const roleCls = (r) => (r === 'admin' ? 'tag-red' : 'tag-blue')
 
-const statusColors = {
-  online: '#30d158',
-  away: '#ff9f0a',
-  busy: '#ff3b30',
-  offline: '#86868b'
-}
-
-const statusLabels = {
-  online: '在线',
-  away: '离开',
-  busy: '忙碌',
-  offline: '离线'
-}
-
-function inviteMember() {
-  showInviteDialog.value = true
-}
-
-function sendInvite() {
-  showInviteDialog.value = false
-}
-
-function getUserProjects(userId) {
-  return projectStore.projects.filter(p => p.members.includes(userId))
+function projCount(uid) {
+  return projects.projects.filter((p) => p.members.includes(uid)).length
 }
 </script>
 
 <template>
-  <div class="team-view">
-    <div class="view-header">
+  <div>
+    <div class="head">
       <div>
         <h1>团队</h1>
-        <p class="view-subtitle">管理团队成员与协作</p>
+        <p class="sub">{{ list.length }} 位成员 · 协作与权限管理</p>
       </div>
-      <div class="header-actions">
-        <div class="search-wrapper">
-          <Search size="18" class="search-icon" />
-          <input
-            type="search"
-            class="search-input input"
-            placeholder="搜索成员..."
-            v-model="searchQuery"
-          />
+      <div class="acts">
+        <div class="search">
+          <Search :size="15" />
+          <input v-model="q" class="input" placeholder="搜索成员…" />
         </div>
-        <div class="view-toggle" role="group">
-          <button class="btn btn-icon" :class="{ active: viewMode === 'grid' }" @click="viewMode = 'grid'"><UserPlus size="18" /></button>
-          <button class="btn btn-icon" :class="{ active: viewMode === 'list' }" @click="viewMode = 'list'"><Settings size="18" /></button>
+        <div class="toggle">
+          <button class="btn btn-icon btn-ghost" :class="{ on: view === 'grid' }" @click="view = 'grid'">
+            <UserPlus :size="17" />
+          </button>
+          <button class="btn btn-icon btn-ghost" :class="{ on: view === 'list' }" @click="view = 'list'">
+            <MoreHorizontal :size="17" />
+          </button>
         </div>
-        <button class="btn btn-primary" @click="inviteMember">
-          <Plus size="16" />
-          邀请成员
+        <button class="btn btn-primary" @click="showInvite = true">
+          <Plus :size="16" /> 邀请成员
         </button>
       </div>
     </div>
 
-    <!-- Grid View -->
-    <div v-show="viewMode === 'grid'" class="team-grid">
-      <div
-        v-for="user in filteredUsers"
-        :key="user.id"
-        class="member-card glass"
-      >
-        <el-avatar :size="60" :src="user.avatar" class="member-avatar" />
-        <div class="member-info">
-          <h3>{{ user.name }}</h3>
-          <p class="member-email">{{ user.email }}</p>
-          <div class="member-meta">
-            <el-tag :type="user.role === 'admin' ? 'danger' : 'info'" size="small">{{ user.role }}</el-tag>
-            <span class="status-indicator" :style="{ background: statusColors[user.status] }" />
-            <span class="status-text">{{ statusLabels[user.status] }}</span>
-          </div>
+    <!-- 网格视图 -->
+    <div v-if="view === 'grid'" class="grid">
+      <div v-for="u in list" :key="u.id" class="mcard glass">
+        <div class="m-top">
+          <img :src="u.avatar" :alt="u.name" class="ava" />
+          <span class="status" :style="{ background: statusMap[u.status].color }" :title="statusMap[u.status].text"></span>
         </div>
-        <div class="member-projects">
-          <span class="project-count">{{ getUserProjects(user.id).length }} 个项目</span>
-          <el-dropdown>
-            <button class="btn btn-icon btn-ghost"><MoreVertical size="16" /></button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item><MessageSquare size="14" /> 发送消息</el-dropdown-item>
-                <el-dropdown-item><Settings size="14" /> 编辑权限</el-dropdown-item>
-                <el-dropdown-item divided class="danger"><UserPlus size="14" /> 移出团队</el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
+        <h3>{{ u.name }}</h3>
+        <p class="mail">{{ u.email }}</p>
+        <div class="m-tags">
+          <span class="tag" :class="roleCls(u.role)">{{ roleText(u.role) }}</span>
+          <span class="tag">{{ projCount(u.id) }} 个项目</span>
+          <span class="tag" :style="{ color: statusMap[u.status].color }">{{ statusMap[u.status].text }}</span>
+        </div>
+        <div class="m-acts">
+          <button class="btn btn-secondary btn-sm" title="发送消息"><MessageSquare :size="14" /> 消息</button>
+          <button class="btn btn-secondary btn-sm" title="发送邮件"><Mail :size="14" /></button>
         </div>
       </div>
     </div>
 
-    <!-- List View -->
-    <div v-show="viewMode === 'list'" class="team-list glass">
-      <table class="members-table">
-        <thead>
-          <tr>
-            <th>成员</th>
-            <th>角色</th>
-            <th>状态</th>
-            <th>项目</th>
-            <th>加入时间</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="user in filteredUsers" :key="user.id">
-            <td>
-              <div class="user-cell">
-                <el-avatar :size="36" :src="user.avatar" />
-                <div>
-                  <p class="user-name">{{ user.name }}</p>
-                  <p class="user-email">{{ user.email }}</p>
-                </div>
-              </div>
-            </td>
-            <td><el-tag :type="user.role === 'admin' ? 'danger' : 'info'" size="small">{{ user.role }}</el-tag></td>
-            <td>
-              <div class="status-cell">
-                <span class="status-dot" :style="{ background: statusColors[user.status] }" />
-                {{ statusLabels[user.status] }}
-              </div>
-            </td>
-            <td>{{ getUserProjects(user.id).length }}</td>
-            <td>2024-01-15</td>
-            <td>
-              <el-dropdown>
-                <button class="btn btn-icon btn-ghost"><MoreVertical size="16" /></button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item><MessageSquare size="14" /> 发送消息</el-dropdown-item>
-                    <el-dropdown-item><Settings size="14" /> 编辑权限</el-dropdown-item>
-                    <el-dropdown-item divided class="danger"><UserPlus size="14" /> 移出团队</el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+    <!-- 列表视图 -->
+    <div v-else class="table glass">
+      <div class="tr th">
+        <span>成员</span><span>角色</span><span>状态</span><span>项目</span><span></span>
+      </div>
+      <div v-for="u in list" :key="u.id" class="tr">
+        <span class="cell-user">
+          <img :src="u.avatar" :alt="u.name" class="ava-s" />
+          <span>
+            <b>{{ u.name }}</b>
+            <small>{{ u.email }}</small>
+          </span>
+        </span>
+        <span><i class="tag" :class="roleCls(u.role)">{{ roleText(u.role) }}</i></span>
+        <span class="cell-status">
+          <i class="sdot" :style="{ background: statusMap[u.status].color }"></i>
+          {{ statusMap[u.status].text }}
+        </span>
+        <span>{{ projCount(u.id) }}</span>
+        <span class="cell-acts">
+          <button class="btn btn-icon btn-ghost"><Mail :size="15" /></button>
+          <button class="btn btn-icon btn-ghost"><MoreHorizontal :size="15" /></button>
+        </span>
+      </div>
     </div>
 
-    <!-- Invite Dialog -->
-    <el-dialog
-      v-model="showInviteDialog"
-      title="邀请新成员"
-      width="500px"
-      :close-on-click-modal="false"
-    >
-      <el-form :model="inviteForm" label-width="80px">
-        <el-form-item label="邮箱">
-          <el-input v-model="inviteForm.email" placeholder="输入邮箱地址" />
-        </el-form-item>
-        <el-form-item label="角色">
-          <el-select v-model="inviteForm.role" placeholder="选择角色">
-            <el-option v-for="r in roles" :key="r.value" :label="r.label" :value="r.value" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="项目">
-          <el-select v-model="inviteForm.projects" multiple placeholder="选择项目" style="width: 100%;">
-            <el-option
-              v-for="p in projectStore.projects"
-              :key="p.id"
-              :label="p.name"
-              :value="p.id"
-            />
-          </el-select>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="showInviteDialog = false">取消</el-button>
-        <el-button type="primary" @click="sendInvite">发送邀请</el-button>
-      </template>
-    </el-dialog>
+    <transition name="pop">
+      <Modal v-if="showInvite" title="邀请新成员" @close="showInvite = false">
+        <div class="form-group">
+          <label>邮箱地址 *</label>
+          <input v-model="invite.email" type="email" class="input" placeholder="teammate@company.com" autofocus />
+        </div>
+        <div class="form-group">
+          <label>角色</label>
+          <select v-model="invite.role" class="input">
+            <option value="member">成员</option>
+            <option value="admin">管理员</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>加入项目</label>
+          <select v-model="invite.projects" class="input" multiple style="min-height: 100px">
+            <option v-for="p in projects.projects" :key="p.id" :value="p.id">{{ p.name }}</option>
+          </select>
+        </div>
+        <template #foot>
+          <button class="btn btn-secondary" @click="showInvite = false">取消</button>
+          <button class="btn btn-primary" @click="showInvite = false">发送邀请</button>
+        </template>
+      </Modal>
+    </transition>
   </div>
 </template>
 
 <style scoped>
-.team-view {
-  height: 100%;
+.head {
   display: flex;
-  flex-direction: column;
-}
-
-.view-header {
-  display: flex;
-  align-items: flex-start;
   justify-content: space-between;
+  gap: 16px;
   margin-bottom: 20px;
   flex-wrap: wrap;
-  gap: 16px;
 }
-
-.view-header h1 {
-  font-size: 28px;
-  font-weight: 700;
-  margin: 0;
-}
-
-.view-subtitle {
-  font-size: 14px;
-  color: var(--text-secondary);
-  margin: 4px 0 0;
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.search-wrapper {
-  position: relative;
-  width: 280px;
-}
-
-.search-icon {
+h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
+.sub { font-size: 13px; color: var(--text-2); margin-top: 3px; }
+.acts { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.search { position: relative; }
+.search svg {
   position: absolute;
-  left: 14px;
+  left: 12px;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--text-tertiary);
-  pointer-events: none;
+  color: var(--text-3);
 }
-
-.search-input {
-  padding-left: 44px;
+.search .input { padding-left: 34px; width: 210px; }
+.toggle {
+  display: flex;
+  background: var(--bg-input);
+  border-radius: var(--r-md);
+  padding: 3px;
 }
-
-.team-grid {
-  flex: 1;
-  overflow-y: auto;
+.toggle .on { background: var(--bg-solid); box-shadow: var(--shadow-sm); color: var(--blue); }
+.grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   gap: 16px;
 }
-
-.member-card {
-  display: flex;
-  flex-direction: column;
-  padding: 20px;
-  border-radius: var(--radius-xl);
-  gap: 16px;
+.mcard {
+  border-radius: var(--r-xl);
+  padding: 22px 20px;
+  text-align: center;
+  transition: transform 0.2s, box-shadow 0.2s;
 }
-
-.member-avatar {
-  align-self: flex-start;
-}
-
-.member-info h3 {
-  font-size: 16px;
-  font-weight: 600;
-  margin: 0 0 4px;
-}
-
-.member-email {
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin: 0 0 12px;
-}
-
-.member-meta {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.status-indicator {
-  width: 8px;
-  height: 8px;
+.mcard:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
+.m-top { position: relative; display: inline-block; }
+.ava {
+  width: 68px;
+  height: 68px;
   border-radius: 50%;
+  background: var(--bg-soft);
+  border: 3px solid var(--bg-solid);
 }
-
-.status-text {
-  font-size: 12px;
-  color: var(--text-tertiary);
+.status {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 3px solid var(--bg-solid);
 }
-
-.member-projects {
+.mcard h3 { font-size: 16px; font-weight: 700; margin-top: 12px; }
+.mail { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+.m-tags {
   display: flex;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.m-acts {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 16px;
+}
+.table { border-radius: var(--r-xl); overflow: hidden; }
+.tr {
+  display: grid;
+  grid-template-columns: 1.6fr 0.8fr 0.8fr 0.6fr auto;
   align-items: center;
-  justify-content: space-between;
-  padding-top: 12px;
-  border-top: 1px solid var(--glass-border);
-}
-
-.project-count {
+  gap: 14px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border-glass);
   font-size: 13px;
-  color: var(--text-secondary);
 }
-
-.team-list {
-  flex: 1;
-  overflow: auto;
-  border-radius: var(--radius-xl);
-}
-
-.members-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.members-table th,
-.members-table td {
-  padding: 14px 16px;
-  text-align: left;
-  border-bottom: 1px solid var(--glass-border);
-}
-
-.members-table th {
-  font-weight: 600;
-  color: var(--text-tertiary);
+.tr:last-child { border-bottom: none; }
+.th {
+  background: var(--bg-input);
   font-size: 11px;
+  font-weight: 700;
+  color: var(--text-3);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  background: var(--bg-tertiary);
 }
-
-.members-table tbody tr:hover {
-  background: rgba(0, 0, 0, 0.02);
-}
-
-.user-cell {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.user-name {
-  font-weight: 500;
-  margin: 0;
-}
-
-.user-email {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  margin: 0;
-}
-
-.status-cell {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-@media (max-width: 640px) {
-  .view-header {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .header-actions {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .search-wrapper {
-    width: 100%;
-  }
-
-  .team-grid {
-    grid-template-columns: 1fr;
-  }
+.tr:not(.th):hover { background: var(--bg-input); }
+.cell-user { display: flex; align-items: center; gap: 12px; }
+.cell-user b { display: block; font-size: 14px; }
+.cell-user small { font-size: 12px; color: var(--text-3); }
+.ava-s { width: 36px; height: 36px; border-radius: 50%; background: var(--bg-soft); }
+.cell-status { display: flex; align-items: center; gap: 7px; }
+.sdot { width: 8px; height: 8px; border-radius: 50%; }
+.cell-acts { display: flex; gap: 4px; justify-content: flex-end; }
+@media (max-width: 900px) {
+  .search .input { width: 100%; }
+  .acts { width: 100%; }
+  .search { flex: 1; }
+  .tr { grid-template-columns: 1fr auto; }
+  .tr > span:nth-child(3), .tr > span:nth-child(4) { display: none; }
 }
 </style>

@@ -1,551 +1,381 @@
 <script setup>
-import { ref, computed } from 'vue'
-import { useUserStore } from '@/stores/user'
-import { User, Bell, Moon, Sun, Palette, Shield, Key, Globe, Database, Trash2, Save, Download, Upload } from 'lucide-vue-next'
-import { ElForm, ElFormItem, ElInput, ElSwitch, ElSelect, ElOption, ElButton, ElAvatar, ElTabs, ElTabPane, ElTag, ElDivider, ElMessage } from 'element-plus'
+import { ref, computed, watch } from 'vue'
+import {
+  User, Bell, Palette, Shield, Database, Save, Download, Trash2, Check
+} from 'lucide-vue-next'
+import { useUsersStore } from '../store'
 
-const userStore = useUserStore()
+const usersStore = useUsersStore()
+const me = computed(() => usersStore.get('1'))
 
-const activeTab = ref('profile')
-const currentUser = computed(() => userStore.currentUser)
+const tab = ref('profile')
+const tabs = [
+  { id: 'profile', label: '个人资料', icon: User },
+  { id: 'notify', label: '通知', icon: Bell },
+  { id: 'appearance', label: '外观', icon: Palette },
+  { id: 'security', label: '安全', icon: Shield },
+  { id: 'data', label: '数据', icon: Database }
+]
 
-const profileForm = ref({
-  name: currentUser.value?.name || '',
-  email: currentUser.value?.email || '',
-  bio: '',
-  timezone: 'Asia/Shanghai',
-  language: 'zh-CN'
+const profile = ref({
+  name: '林青川',
+  email: 'qingchuan@team.com',
+  bio: '产品与工程的交叉点，热爱构建优雅的界面。',
+  timezone: 'Asia/Shanghai (UTC+8)'
 })
 
-const notificationSettings = ref({
-  email: true,
-  push: true,
+const notify = ref({
   taskAssigned: true,
   taskUpdated: true,
   comments: true,
-  mentions: true,
-  weeklyDigest: false
+  weekly: false,
+  sound: true
 })
 
-const appearanceSettings = ref({
-  theme: 'system',
-  compactMode: false,
-  animations: true
+const appearance = ref({
+  theme: localStorage.getItem('theme') === 'dark' ? 'dark' : 'light',
+  motion: true,
+  compact: false
 })
 
-const securitySettings = ref({
-  twoFactor: false,
-  sessionTimeout: 30
-})
+watch(
+  () => appearance.value.theme,
+  (v) => {
+    const dark = v === 'dark' || (v === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+    document.documentElement.classList.toggle('dark', dark)
+    localStorage.setItem('theme', dark ? 'dark' : 'light')
+  },
+  { immediate: true }
+)
 
-const integrations = ref([
-  { name: 'GitHub', connected: true, icon: 'github' },
-  { name: 'GitLab', connected: false, icon: 'gitlab' },
-  { name: 'Slack', connected: true, icon: 'message-square' },
-  { name: 'Jira', connected: false, icon: 'ticket' },
-  { name: 'Figma', connected: false, icon: 'figma' },
-  { name: 'Notion', connected: false, icon: 'file-text' }
-])
+const security = ref({ twofa: false, timeout: 60 })
 
-const themes = [
-  { value: 'light', label: '浅色', icon: Sun },
-  { value: 'dark', label: '深色', icon: Moon },
-  { value: 'system', label: '跟随系统', icon: Globe }
-]
-
-const languages = [
-  { value: 'zh-CN', label: '中文 (简体)' },
-  { value: 'en-US', label: 'English' },
-  { value: 'ja-JP', label: '日本語' }
-]
-
-const timezones = [
-  'Asia/Shanghai', 'Asia/Tokyo', 'Asia/Seoul',
-  'America/New_York', 'America/Los_Angeles', 'America/Chicago',
-  'Europe/London', 'Europe/Paris', 'Europe/Berlin',
-  'Australia/Sydney'
-]
-
-function saveProfile() {
-  ElMessage.success('个人资料已保存')
-}
-
-function saveNotifications() {
-  ElMessage.success('通知设置已保存')
-}
-
-function saveAppearance() {
-  ElMessage.success('外观设置已保存')
-  applyTheme(appearanceSettings.value.theme)
-}
-
-function applyTheme(theme) {
-  const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-  document.documentElement.classList.toggle('dark', isDark)
-  localStorage.setItem('theme', theme)
-}
-
-function exportData() {
-  ElMessage.info('数据导出功能开发中...')
-}
-
-function importData() {
-  ElMessage.info('数据导入功能开发中...')
-}
-
-function deleteAccount() {
-  ElMessage.warning('删除账号功能开发中...')
+const toast = ref('')
+function save(msg) {
+  toast.value = msg
+  setTimeout(() => (toast.value = ''), 2200)
 }
 </script>
 
 <template>
-  <div class="settings-view">
-    <div class="view-header">
+  <div>
+    <div class="head">
       <div>
         <h1>设置</h1>
-        <p class="view-subtitle">管理您的账号、偏好设置与集成</p>
+        <p class="sub">管理账号、偏好与数据</p>
       </div>
+      <transition name="fade">
+        <span v-if="toast" class="toast"><Check :size="15" /> {{ toast }}</span>
+      </transition>
     </div>
 
-    <el-tabs v-model="activeTab" class="settings-tabs">
-      <!-- Profile -->
-      <el-tab-pane label="个人资料" name="profile">
-        <el-form :model="profileForm" label-width="100px" class="settings-form">
-          <el-form-item label="头像">
-            <el-avatar :size="80" :src="currentUser?.avatar" class="avatar-preview" />
-            <div class="form-hint">点击头像上传新图片</div>
-          </el-form-item>
-          <el-form-item label="姓名">
-            <el-input v-model="profileForm.name" placeholder="输入您的姓名" />
-          </el-form-item>
-          <el-form-item label="邮箱">
-            <el-input v-model="profileForm.email" placeholder="输入邮箱地址" />
-          </el-form-item>
-          <el-form-item label="个人简介">
-            <el-input v-model="profileForm.bio" type="textarea" placeholder="介绍一下您自己" :rows="3" />
-          </el-form-item>
-          <el-form-item label="时区">
-            <el-select v-model="profileForm.timezone" placeholder="选择时区" style="width: 100%;">
-              <el-option v-for="tz in timezones" :key="tz" :label="tz" :value="tz" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="语言">
-            <el-select v-model="profileForm.language" placeholder="选择语言" style="width: 100%;">
-              <el-option v-for="lang in languages" :key="lang.value" :label="lang.label" :value="lang.value" />
-            </el-select>
-          </el-form-item>
-          <el-form-item>
-            <el-button type="primary" @click="saveProfile"><Save size="16" /> 保存更改</el-button>
-          </el-form-item>
-        </el-form>
-      </el-tab-pane>
+    <div class="layout">
+      <nav class="tabs glass">
+        <button
+          v-for="t in tabs"
+          :key="t.id"
+          class="tab"
+          :class="{ on: tab === t.id }"
+          @click="tab = t.id"
+        >
+          <component :is="t.icon" :size="17" />
+          {{ t.label }}
+        </button>
+      </nav>
 
-      <!-- Notifications -->
-      <el-tab-pane label="通知" name="notifications">
-        <el-form :model="notificationSettings" class="settings-form">
-          <div class="settings-section">
-            <h3>通知方式</h3>
-            <el-form-item label="邮件通知">
-              <el-switch v-model="notificationSettings.email" />
-            </el-form-item>
-            <el-form-item label="推送通知">
-              <el-switch v-model="notificationSettings.push" />
-            </el-form-item>
-          </div>
-
-          <el-divider />
-
-          <div class="settings-section">
-            <h3>任务通知</h3>
-            <el-form-item label="分配给我的任务">
-              <el-switch v-model="notificationSettings.taskAssigned" />
-            </el-form-item>
-            <el-form-item label="任务状态更新">
-              <el-switch v-model="notificationSettings.taskUpdated" />
-            </el-form-item>
-            <el-form-item label="评论回复">
-              <el-switch v-model="notificationSettings.comments" />
-            </el-form-item>
-            <el-form-item label="@ 提及我">
-              <el-switch v-model="notificationSettings.mentions" />
-            </el-form-item>
-          </div>
-
-          <el-divider />
-
-          <div class="settings-section">
-            <h3>汇总报告</h3>
-            <el-form-item label="每周汇总邮件">
-              <el-switch v-model="notificationSettings.weeklyDigest" />
-            </el-form-item>
-          </div>
-
-          <el-form-item>
-            <el-button type="primary" @click="saveNotifications"><Save size="16" /> 保存设置</el-button>
-          </el-form-item>
-        </el-form>
-      </el-tab-pane>
-
-      <!-- Appearance -->
-      <el-tab-pane label="外观" name="appearance">
-        <el-form :model="appearanceSettings" class="settings-form">
-          <div class="settings-section">
-            <h3>主题模式</h3>
-            <div class="theme-options">
-              <label
-                v-for="theme in themes"
-                :key="theme.value"
-                class="theme-option"
-                :class="{ active: appearanceSettings.theme === theme.value }"
-                @click="appearanceSettings.theme = theme.value"
-              >
-                <component :is="theme.icon" size="20" />
-                <span>{{ theme.label }}</span>
-                <el-tag v-if="theme.value === 'system'" size="small" type="info">推荐</el-tag>
-              </label>
+      <div class="content glass">
+        <!-- 个人资料 -->
+        <template v-if="tab === 'profile'">
+          <div class="sec">
+            <h3>个人资料</h3>
+            <div class="ava-row">
+              <img :src="me?.avatar" :alt="me?.name" class="big-ava" />
+              <div>
+                <button class="btn btn-secondary btn-sm">更换头像</button>
+                <p class="hint">JPG / PNG，最大 2MB</p>
+              </div>
             </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>姓名</label>
+                <input v-model="profile.name" class="input" />
+              </div>
+              <div class="form-group">
+                <label>邮箱</label>
+                <input v-model="profile.email" class="input" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label>个人简介</label>
+              <textarea v-model="profile.bio" class="input" rows="3"></textarea>
+            </div>
+            <div class="form-group">
+              <label>时区</label>
+              <select v-model="profile.timezone" class="input">
+                <option>Asia/Shanghai (UTC+8)</option>
+                <option>Asia/Tokyo (UTC+9)</option>
+                <option>America/New_York (UTC-5)</option>
+                <option>Europe/London (UTC+0)</option>
+              </select>
+            </div>
+            <button class="btn btn-primary" @click="save('个人资料已保存')"><Save :size="15" /> 保存更改</button>
           </div>
+        </template>
 
-          <el-divider />
-
-          <div class="settings-section">
-            <h3>界面偏好</h3>
-            <el-form-item label="紧凑模式">
-              <el-switch v-model="appearanceSettings.compactMode" />
-            </el-form-item>
-            <el-form-item label="动画效果">
-              <el-switch v-model="appearanceSettings.animations" />
-            </el-form-item>
+        <!-- 通知 -->
+        <template v-if="tab === 'notify'">
+          <div class="sec">
+            <h3>通知偏好</h3>
+            <div class="switch-row" v-for="(v, k, i) in notify" :key="k">
+              <div>
+                <b>{{ ['任务分配给我', '任务状态更新', '评论与回复', '每周汇总邮件', '提示音'][i] }}</b>
+                <small>{{ ['有人把任务指派给你时提醒', '任务进度变化时提醒', '有人回复你时提醒', '每周一发送进度报告', '播放轻提示音'][i] }}</small>
+              </div>
+              <button class="switch" :class="{ on: v }" @click="notify[k] = !v"><i></i></button>
+            </div>
+            <button class="btn btn-primary" @click="save('通知设置已保存')"><Save :size="15" /> 保存设置</button>
           </div>
+        </template>
 
-          <el-form-item>
-            <el-button type="primary" @click="saveAppearance"><Save size="16" /> 保存设置</el-button>
-          </el-form-item>
-        </el-form>
-      </el-tab-pane>
+        <!-- 外观 -->
+        <template v-if="tab === 'appearance'">
+          <div class="sec">
+            <h3>主题</h3>
+            <div class="theme-grid">
+              <button class="theme-card" :class="{ on: appearance.theme === 'light' }" @click="appearance.theme = 'light'">
+                <i class="prev light"></i>
+                <span>浅色</span>
+                <Check v-if="appearance.theme === 'light'" :size="15" class="chk" />
+              </button>
+              <button class="theme-card" :class="{ on: appearance.theme === 'dark' }" @click="appearance.theme = 'dark'">
+                <i class="prev dark"></i>
+                <span>深色</span>
+                <Check v-if="appearance.theme === 'dark'" :size="15" class="chk" />
+              </button>
+              <button class="theme-card" :class="{ on: appearance.theme === 'system' }" @click="appearance.theme = 'system'">
+                <i class="prev system"></i>
+                <span>跟随系统</span>
+                <Check v-if="appearance.theme === 'system'" :size="15" class="chk" />
+              </button>
+            </div>
+            <h3 style="margin-top: 26px">界面</h3>
+            <div class="switch-row" v-for="(v, k, i) in { motion: appearance.motion, compact: appearance.compact }" :key="k">
+              <div>
+                <b>{{ ['动画效果', '紧凑模式'][i] }}</b>
+                <small>{{ ['启用过渡与微动效', '减小间距以显示更多内容'][i] }}</small>
+              </div>
+              <button class="switch" :class="{ on: v }" @click="appearance[k] = !v"><i></i></button>
+            </div>
+            <button class="btn btn-primary" @click="save('外观设置已保存')"><Save :size="15" /> 保存设置</button>
+          </div>
+        </template>
 
-      <!-- Security -->
-      <el-tab-pane label="安全" name="security">
-        <el-form :model="securitySettings" class="settings-form">
-          <div class="settings-section">
+        <!-- 安全 -->
+        <template v-if="tab === 'security'">
+          <div class="sec">
             <h3>账号安全</h3>
-            <el-form-item label="两步验证 (2FA)">
-              <el-switch v-model="securitySettings.twoFactor" />
-              <template #append>
-                <el-button size="small" v-if="!securitySettings.twoFactor">启用</el-button>
-                <el-button size="small" v-else type="danger">禁用</el-button>
-              </template>
-            </el-form-item>
-            <el-form-item label="会话超时 (分钟)">
-              <el-input v-model.number="securitySettings.sessionTimeout" type="number" :min="5" :max="480" style="width: 120px;" />
-            </el-form-item>
-          </div>
-
-          <el-divider />
-
-          <div class="settings-section danger-zone">
-            <h3>危险区域</h3>
-            <div class="danger-item">
+            <div class="switch-row">
               <div>
-                <h4>删除账号</h4>
-                <p>永久删除您的账号及所有数据，此操作不可恢复。</p>
+                <b>两步验证 (2FA)</b>
+                <small>登录时需要额外验证码，更安全</small>
               </div>
-              <el-button type="danger" @click="deleteAccount"><Trash2 size="16" /> 删除账号</el-button>
+              <button class="switch" :class="{ on: security.twofa }" @click="security.twofa = !security.twofa"><i></i></button>
+            </div>
+            <div class="form-group" style="max-width: 240px">
+              <label>会话超时（分钟）</label>
+              <input v-model.number="security.timeout" type="number" min="5" class="input" />
+            </div>
+            <button class="btn btn-primary" @click="save('安全设置已保存')"><Save :size="15" /> 保存设置</button>
+
+            <div class="danger">
+              <div>
+                <b>删除账号</b>
+                <small>永久删除账号与全部数据，不可恢复</small>
+              </div>
+              <button class="btn btn-danger btn-sm" @click="save('演示环境不可删除')"><Trash2 :size="14" /> 删除账号</button>
             </div>
           </div>
-        </el-form>
-      </el-tab-pane>
+        </template>
 
-      <!-- Integrations -->
-      <el-tab-pane label="集成" name="integrations">
-        <div class="integrations-list">
-          <div
-            v-for="integration in integrations"
-            :key="integration.name"
-            class="integration-card glass"
-          >
-            <div class="integration-info">
-              <div class="integration-icon">
-                <component :is="integration.icon" size="24" />
-              </div>
-              <div>
-                <h4>{{ integration.name }}</h4>
-                <p>{{ integration.connected ? '已连接' : '未连接' }}</p>
-              </div>
-            </div>
-            <el-button
-              :type="integration.connected ? 'danger' : 'primary'"
-              size="small"
-            >
-              {{ integration.connected ? '断开连接' : '连接' }}
-            </el-button>
-          </div>
-        </div>
-      </el-tab-pane>
-
-      <!-- Data -->
-      <el-tab-pane label="数据" name="data">
-        <el-form class="settings-form">
-          <div class="settings-section">
+        <!-- 数据 -->
+        <template v-if="tab === 'data'">
+          <div class="sec">
             <h3>数据管理</h3>
-            <div class="data-actions">
-              <div class="data-action">
-                <div>
-                  <h4>导出数据</h4>
-                  <p>下载您的所有项目、任务和设置数据 (JSON 格式)</p>
-                </div>
-                <el-button @click="exportData"><Download size="16" /> 导出</el-button>
+            <div class="data-row">
+              <div>
+                <b>导出数据</b>
+                <small>下载全部项目、任务与设置（JSON）</small>
               </div>
-              <div class="data-action">
-                <div>
-                  <h4>导入数据</h4>
-                  <p>从之前的导出文件恢复数据</p>
-                </div>
-                <el-button @click="importData"><Upload size="16" /> 导入</el-button>
+              <button class="btn btn-secondary btn-sm" @click="save('已生成导出文件')"><Download :size="14" /> 导出</button>
+            </div>
+            <div class="data-row">
+              <div>
+                <b>导入数据</b>
+                <small>从之前的导出文件恢复</small>
               </div>
+              <button class="btn btn-secondary btn-sm" @click="save('请选择 JSON 文件')"><Download :size="14" style="transform: rotate(180deg)" /> 导入</button>
             </div>
           </div>
-        </el-form>
-      </el-tab-pane>
-    </el-tabs>
+        </template>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.settings-view {
-  height: 100%;
+.head {
   display: flex;
-  flex-direction: column;
-}
-
-.view-header {
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
   margin-bottom: 20px;
 }
-
-.view-header h1 {
-  font-size: 28px;
-  font-weight: 700;
-  margin: 0;
-}
-
-.view-subtitle {
-  font-size: 14px;
-  color: var(--text-secondary);
-  margin: 4px 0 0;
-}
-
-.settings-tabs {
-  flex: 1;
-  overflow: auto;
-}
-
-.settings-form {
-  padding: 24px;
-  max-width: 720px;
-}
-
-.settings-section {
-  margin-bottom: 24px;
-}
-
-.settings-section h3 {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin: 0 0 16px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--glass-border);
-}
-
-.form-hint {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  margin-top: 8px;
-}
-
-.avatar-preview {
-  border-radius: 50%;
-  cursor: pointer;
-  transition: transform var(--transition-fast);
-}
-
-.avatar-preview:hover {
-  transform: scale(1.05);
-}
-
-.theme-options {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 12px;
-}
-
-.theme-option {
-  display: flex;
-  flex-direction: column;
+h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
+.sub { font-size: 13px; color: var(--text-2); margin-top: 3px; }
+.toast {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 20px;
-  border: 2px solid var(--glass-border);
-  border-radius: var(--radius-lg);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  background: var(--bg-secondary);
-}
-
-.theme-option:hover {
-  border-color: var(--accent-blue);
-}
-
-.theme-option.active {
-  border-color: var(--accent-blue);
-  background: rgba(0, 113, 227, 0.05);
-}
-
-.theme-option :global(.el-tag) {
-  margin-top: 4px;
-}
-
-.danger-zone {
-  background: rgba(255, 59, 48, 0.05);
-  border: 1px solid rgba(255, 59, 48, 0.1);
-  border-radius: var(--radius-lg);
-  padding: 20px;
-}
-
-.danger-zone h3 {
-  color: var(--accent-red);
-  border-color: rgba(255, 59, 48, 0.1);
-}
-
-.danger-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.danger-item h4 {
-  font-size: 14px;
-  font-weight: 600;
-  margin: 0 0 4px;
-  color: var(--text-primary);
-}
-
-.danger-item p {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  margin: 0;
-}
-
-.integrations-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 24px;
-  max-width: 720px;
-}
-
-.integration-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px;
-  border-radius: var(--radius-lg);
-}
-
-.integration-info {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.integration-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-md);
-  background: var(--bg-tertiary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-secondary);
-}
-
-.integration-info h4 {
-  font-size: 15px;
-  font-weight: 600;
-  margin: 0 0 2px;
-}
-
-.integration-info p {
+  gap: 7px;
   font-size: 13px;
-  color: var(--text-tertiary);
-  margin: 0;
+  font-weight: 600;
+  color: #248a3d;
+  background: rgba(48, 209, 88, 0.16);
+  padding: 9px 16px;
+  border-radius: 100px;
 }
-
-.data-actions {
+.dark .toast { color: var(--green); }
+.layout { display: grid; grid-template-columns: 220px 1fr; gap: 16px; align-items: start; }
+.tabs {
+  border-radius: var(--r-xl);
+  padding: 8px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 3px;
+  position: sticky;
+  top: 0;
 }
-
-.data-action {
+.tab {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 20px;
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-lg);
-  background: var(--bg-secondary);
-}
-
-.data-action h4 {
-  font-size: 15px;
-  font-weight: 600;
-  margin: 0 0 4px;
-}
-
-.data-action p {
-  font-size: 13px;
-  color: var(--text-tertiary);
-  margin: 0;
-}
-
-:deep(.el-tabs__nav) {
-  border-bottom: 1px solid var(--glass-border);
-  margin-bottom: 0;
-}
-
-:deep(.el-tabs__item) {
-  color: var(--text-secondary);
+  gap: 10px;
+  padding: 11px 14px;
+  background: none;
+  border: none;
+  border-radius: var(--r-md);
+  font-family: inherit;
+  font-size: 14px;
   font-weight: 500;
+  color: var(--text-2);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s;
 }
-
-:deep(.el-tabs__item.is-active) {
-  color: var(--accent-blue);
+.tab:hover { background: var(--bg-input); color: var(--text); }
+.tab.on { background: var(--blue); color: #fff; }
+.content { border-radius: var(--r-xl); padding: 26px; }
+.sec h3 {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin-bottom: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-glass);
 }
-
-:deep(.el-tabs__active-bar) {
-  background: var(--accent-blue);
+.sec .btn-primary { margin-top: 8px; }
+.ava-row { display: flex; align-items: center; gap: 18px; margin-bottom: 22px; }
+.big-ava { width: 74px; height: 74px; border-radius: 50%; background: var(--bg-soft); }
+.hint { font-size: 11px; color: var(--text-3); margin-top: 6px; }
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 15px 0;
+  border-bottom: 1px solid var(--border-glass);
 }
-
-@media (max-width: 640px) {
-  .settings-form {
-    padding: 16px;
-  }
-
-  .theme-options {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .data-action {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-  }
-
-  .danger-item {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-  }
+.switch-row b { font-size: 14px; display: block; }
+.switch-row small { font-size: 12px; color: var(--text-3); }
+.switch {
+  width: 46px;
+  height: 27px;
+  background: var(--border);
+  border: none;
+  border-radius: 100px;
+  cursor: pointer;
+  padding: 2px;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.switch i {
+  display: block;
+  width: 23px;
+  height: 23px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s ease;
+  box-shadow: var(--shadow-sm);
+}
+.switch.on { background: var(--green); }
+.switch.on i { transform: translateX(19px); }
+.theme-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.theme-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  background: var(--bg-input);
+  border: 2px solid transparent;
+  border-radius: var(--r-md);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.16s;
+}
+.theme-card.on { border-color: var(--blue); background: rgba(0, 113, 227, 0.07); }
+.chk { position: absolute; top: 8px; right: 8px; color: var(--blue); }
+.prev {
+  width: 100%;
+  height: 54px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+}
+.prev.light { background: linear-gradient(135deg, #fff 50%, #f5f5f7 50%); }
+.prev.dark { background: linear-gradient(135deg, #1c1c1e 50%, #000 50%); }
+.prev.system { background: linear-gradient(135deg, #fff 50%, #1c1c1e 50%); }
+.danger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 28px;
+  padding: 18px;
+  background: rgba(255, 69, 58, 0.07);
+  border: 1px solid rgba(255, 69, 58, 0.2);
+  border-radius: var(--r-md);
+}
+.danger b { font-size: 14px; display: block; color: var(--red); }
+.danger small { font-size: 12px; color: var(--text-3); }
+.data-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  background: var(--bg-input);
+  border-radius: var(--r-md);
+  margin-bottom: 12px;
+}
+.data-row b { font-size: 14px; display: block; }
+.data-row small { font-size: 12px; color: var(--text-3); }
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  .tabs { flex-direction: row; overflow-x: auto; position: static; }
+  .theme-grid { grid-template-columns: 1fr; }
 }
 </style>

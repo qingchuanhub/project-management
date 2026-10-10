@@ -1,419 +1,244 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useTaskStore } from '@/stores/task'
-import { useProjectStore } from '@/stores/project'
-import { Plus, Search, Filter, MoreVertical, ChevronDown } from 'lucide-vue-next'
-import KanbanColumn from '@/components/kanban/KanbanColumn.vue'
-import TaskCard from '@/components/kanban/TaskCard.vue'
-import { ElMessage } from 'element-plus'
+import { ref, computed } from 'vue'
+import { Plus, Search } from 'lucide-vue-next'
+import TaskCard from '../components/TaskCard.vue'
+import Modal from '../components/Modal.vue'
+import { useProjectsStore, useTasksStore, useUsersStore } from '../store'
 
-const taskStore = useTaskStore()
-const projectStore = useProjectStore()
+const projects = useProjectsStore()
+const tasksStore = useTasksStore()
+const usersStore = useUsersStore()
 
-const searchQuery = ref('')
-const showCreateModal = ref(false)
-const newTask = ref({
+const pid = ref('p1')
+const q = ref('')
+const showNew = ref(false)
+const dragOver = ref('')
+
+const cols = tasksStore.columns
+
+const form = ref({
   title: '',
-  description: '',
-  status: 'todo',
+  desc: '',
+  col: 'todo',
   priority: 'medium',
-  assignee: '',
-  tags: [],
-  dueDate: ''
-})
-const draggedTask = ref(null)
-const dragOverColumn = ref(null)
-
-const currentProject = computed(() => projectStore.activeProject)
-const columns = computed(() => taskStore.columns)
-const tasksByColumn = computed(() => taskStore.tasksByColumn)
-const taskCounts = computed(() => taskStore.taskCounts)
-
-const filteredTasks = computed(() => {
-  if (!searchQuery.value) return tasksByColumn.value
-  const query = searchQuery.value.toLowerCase()
-  const filtered = {}
-  Object.keys(tasksByColumn.value).forEach(col => {
-    filtered[col] = tasksByColumn.value[col].filter(task =>
-      task.title.toLowerCase().includes(query) ||
-      task.description?.toLowerCase().includes(query)
-    )
-  })
-  return filtered
+  assignee: '1',
+  due: ''
 })
 
-function handleDragStart(task, event) {
-  draggedTask.value = task
-  event.dataTransfer.effectAllowed = 'move'
-  event.dataTransfer.setData('text/plain', task.id)
-  setTimeout(() => {
-    event.target.classList.add('dragging')
-  }, 0)
-}
-
-function handleDragEnd(event) {
-  event.target.classList.remove('dragging')
-  draggedTask.value = null
-  dragOverColumn.value = null
-}
-
-function handleDragOver(event, columnId) {
-  event.preventDefault()
-  event.dataTransfer.dropEffect = 'move'
-  dragOverColumn.value = columnId
-}
-
-function handleDragLeave(event, columnId) {
-  const rect = event.currentTarget.getBoundingClientRect()
-  if (
-    event.clientY < rect.top ||
-    event.clientY > rect.bottom ||
-    event.clientX < rect.left ||
-    event.clientX > rect.right
-  ) {
-    if (dragOverColumn.value === columnId) {
-      dragOverColumn.value = null
-    }
+function tasksOf(col) {
+  let arr = tasksStore.byCol(pid.value, col)
+  if (q.value.trim()) {
+    const s = q.value.toLowerCase()
+    arr = arr.filter((t) => t.title.toLowerCase().includes(s) || (t.desc || '').toLowerCase().includes(s))
   }
+  return arr
 }
 
-function handleDrop(event, columnId) {
-  event.preventDefault()
-  if (draggedTask.value && draggedTask.value.status !== columnId) {
-    const columnTasks = filteredTasks.value[columnId] || []
-    const rect = event.currentTarget.getBoundingClientRect()
-    const y = event.clientY - rect.top
-    const taskHeight = 80
-    const newOrder = Math.floor(y / taskHeight)
-    const clampedOrder = Math.max(0, Math.min(newOrder, columnTasks.length))
-    taskStore.moveTask(draggedTask.value.id, columnId, clampedOrder)
-  }
-  dragOverColumn.value = null
+const counts = computed(() => {
+  const o = {}
+  cols.forEach((c) => (o[c.id] = tasksOf(c.id).length))
+  return o
+})
+
+function onDrop(e, colId) {
+  e.preventDefault()
+  dragOver.value = ''
+  const id = e.dataTransfer.getData('text/plain')
+  if (!id) return
+  const index = tasksOf(colId).length
+  tasksStore.move(id, colId, index)
 }
 
-function openCreateTask(status = 'todo') {
-  newTask.value = {
-    title: '',
-    description: '',
-    status,
-    priority: 'medium',
-    assignee: '',
-    tags: [],
-    dueDate: ''
-  }
-  showCreateModal.value = true
-}
-
-function createTask() {
-  if (!newTask.value.title.trim()) return
-  taskStore.addTask(newTask.value)
-  showCreateModal.value = false
-  ElMessage.success('任务创建成功')
-}
-
-function formatDate(dateStr) {
-  if (!dateStr) return ''
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
-}
-
-const statusColors = {
-  todo: '#86868b',
-  'in-progress': '#0071e3',
-  review: '#ff9f0a',
-  done: '#30d158'
+function create() {
+  if (!form.value.title.trim()) return
+  tasksStore.add({ ...form.value, pid: pid.value, tags: [] })
+  showNew.value = false
+  form.value = { title: '', desc: '', col: 'todo', priority: 'medium', assignee: '1', due: '' }
 }
 </script>
 
 <template>
-  <div class="kanban-view">
-    <!-- Header -->
-    <div class="view-header">
+  <div class="kanban">
+    <div class="head">
       <div>
         <h1>看板</h1>
-        <p class="view-subtitle" v-if="currentProject">{{ currentProject.name }} - 任务管理</p>
+        <p class="sub">拖拽任务卡片调整状态 · 共 {{ tasksStore.byProject(pid).length }} 个任务</p>
       </div>
-      <div class="header-actions">
-        <div class="search-wrapper">
-          <Search size="18" class="search-icon" />
-          <input
-            type="search"
-            class="search-input input"
-            placeholder="搜索任务..."
-            v-model="searchQuery"
-          />
+      <div class="acts">
+        <select v-model="pid" class="input" style="width: 190px">
+          <option v-for="p in projects.projects" :key="p.id" :value="p.id">{{ p.icon }} {{ p.name }}</option>
+        </select>
+        <div class="search">
+          <Search :size="15" />
+          <input v-model="q" class="input" placeholder="搜索任务…" />
         </div>
-        <button class="btn btn-primary" @click="openCreateTask">
-          <Plus size="16" />
-          新建任务
+        <button class="btn btn-primary" @click="showNew = true">
+          <Plus :size="16" /> 新建任务
         </button>
       </div>
     </div>
 
-    <!-- Kanban Board -->
-    <div class="kanban-board" role="list">
-      <KanbanColumn
-        v-for="column in columns"
-        :key="column.id"
-        :column="column"
-        :tasks="filteredTasks[column.id]"
-        :count="taskCounts[column.id]"
-        :is-drag-over="dragOverColumn === column.id"
-        @drag-over="handleDragOver"
-        @drag-leave="handleDragLeave"
-        @drop="handleDrop"
-        @add-task="openCreateTask"
-      />
-    </div>
+    <div class="board">
+      <section
+        v-for="c in cols"
+        :key="c.id"
+        class="col glass"
+        :class="{ over: dragOver === c.id }"
+        @dragover.prevent="dragOver = c.id"
+        @dragleave="dragOver = ''"
+        @drop="onDrop($event, c.id)"
+      >
+        <header class="col-head">
+          <i class="cdot" :style="{ background: c.color }"></i>
+          <h3>{{ c.title }}</h3>
+          <span class="count">{{ counts[c.id] }}</span>
+          <button class="btn btn-icon btn-ghost" @click="form.col = c.id; showNew = true">
+            <Plus :size="15" />
+          </button>
+        </header>
 
-    <!-- Create Task Modal -->
-    <transition name="fade">
-      <div class="modal-overlay" v-show="showCreateModal" @click.self="showCreateModal = false">
-        <div class="modal glass-strong" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-          <div class="modal-header">
-            <h2 id="modal-title">新建任务</h2>
-            <button class="btn btn-icon btn-ghost" @click="showCreateModal = false">
-              <X size="20" />
+        <div class="col-body">
+          <TaskCard v-for="t in tasksOf(c.id)" :key="t.id" :task="t" />
+          <div v-if="!tasksOf(c.id).length" class="empty">
+            <span>暂无任务</span>
+            <button class="btn btn-ghost btn-sm" @click="form.col = c.id; showNew = true">
+              <Plus :size="13" /> 添加任务
             </button>
           </div>
-          <form @submit.prevent="createTask" class="modal-body">
-            <div class="form-group">
-              <label for="task-title">标题 *</label>
-              <input
-                id="task-title"
-                type="text"
-                class="input"
-                v-model="newTask.title"
-                placeholder="输入任务标题"
-                required
-                autofocus
-              />
-            </div>
-            <div class="form-group">
-              <label for="task-description">描述</label>
-              <textarea
-                id="task-description"
-                class="input"
-                v-model="newTask.description"
-                placeholder="任务详细描述"
-                rows="3"
-              />
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>优先级</label>
-                <select class="input select" v-model="newTask.priority">
-                  <option value="low">低</option>
-                  <option value="medium">中</option>
-                  <option value="high">高</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>截止日期</label>
-                <input type="date" class="input" v-model="newTask.dueDate" />
-              </div>
-            </div>
-            <div class="form-group">
-              <label>标签 (逗号分隔)</label>
-              <input
-                type="text"
-                class="input"
-                v-model="newTask.tags"
-                placeholder="frontend, bug, urgent"
-              />
-            </div>
-            <div class="modal-footer">
-              <button type="button" class="btn btn-secondary" @click="showCreateModal = false">取消</button>
-              <button type="submit" class="btn btn-primary">创建任务</button>
-            </div>
-          </form>
         </div>
-      </div>
+      </section>
+    </div>
+
+    <transition name="pop">
+      <Modal v-if="showNew" title="新建任务" @close="showNew = false">
+        <div class="form-group">
+          <label>任务标题 *</label>
+          <input v-model="form.title" class="input" placeholder="输入任务标题" autofocus />
+        </div>
+        <div class="form-group">
+          <label>任务描述</label>
+          <textarea v-model="form.desc" class="input" placeholder="任务详情"></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>状态列</label>
+            <select v-model="form.col" class="input">
+              <option v-for="c in cols" :key="c.id" :value="c.id">{{ c.title }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>优先级</label>
+            <select v-model="form.priority" class="input">
+              <option value="low">低</option>
+              <option value="medium">中</option>
+              <option value="high">高</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>负责人</label>
+            <select v-model="form.assignee" class="input">
+              <option v-for="u in usersStore.users" :key="u.id" :value="u.id">{{ u.name }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>截止日期</label>
+            <input v-model="form.due" type="date" class="input" />
+          </div>
+        </div>
+        <template #foot>
+          <button class="btn btn-secondary" @click="showNew = false">取消</button>
+          <button class="btn btn-primary" @click="create">创建</button>
+        </template>
+      </Modal>
     </transition>
   </div>
 </template>
 
 <style scoped>
-.kanban-view {
-  height: 100%;
+.head {
   display: flex;
-  flex-direction: column;
-}
-
-.view-header {
-  display: flex;
-  align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: 24px;
-  flex-wrap: wrap;
   gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
 }
-
-.view-header h1 {
-  font-size: 28px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin: 0;
-}
-
-.view-subtitle {
-  font-size: 14px;
-  color: var(--text-secondary);
-  margin: 4px 0 0;
-}
-
-.header-actions {
+h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
+.sub { font-size: 13px; color: var(--text-2); margin-top: 3px; }
+.acts {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 10px;
   flex-wrap: wrap;
 }
-
-.search-wrapper {
-  position: relative;
-  width: 280px;
-}
-
-.search-icon {
+.search { position: relative; }
+.search svg {
   position: absolute;
-  left: 14px;
+  left: 12px;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--text-tertiary);
-  pointer-events: none;
+  color: var(--text-3);
 }
-
-.search-input {
-  padding-left: 44px;
-}
-
-.kanban-board {
-  flex: 1;
+.search .input { padding-left: 34px; width: 200px; }
+.board {
   display: flex;
-  gap: 16px;
+  gap: 14px;
   overflow-x: auto;
-  padding: 8px;
-  padding-bottom: 24px;
-  min-height: 600px;
+  padding-bottom: 12px;
+  min-height: calc(100vh - 240px);
 }
-
-.kanban-board::-webkit-scrollbar {
-  height: 8px;
+.col {
+  flex: 1;
+  min-width: 260px;
+  max-width: 340px;
+  border-radius: var(--r-xl);
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
-
-.kanban-board::-webkit-scrollbar-track {
-  background: transparent;
+.col.over {
+  border-color: rgba(0, 113, 227, 0.5);
+  box-shadow: 0 0 0 2px rgba(0, 113, 227, 0.18);
 }
-
-.kanban-board::-webkit-scrollbar-thumb {
-  background: var(--text-tertiary);
-  border-radius: 4px;
-  opacity: 0.5;
-}
-
-.kanban-board::-webkit-scrollbar-thumb:hover {
-  opacity: 1;
-}
-
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+.col-head {
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 24px;
-  z-index: 1000;
-  animation: fadeIn 0.2s ease-out;
+  gap: 9px;
+  padding: 15px 16px;
+  border-bottom: 1px solid var(--border-glass);
 }
-
-.modal {
-  width: 100%;
-  max-width: 500px;
-  max-height: 90vh;
+.cdot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+.col-head h3 {
+  font-size: 14px;
+  font-weight: 700;
+}
+.count {
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--bg-input);
+  color: var(--text-2);
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+.col-head .btn { margin-left: auto; }
+.col-body {
+  flex: 1;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   overflow-y: auto;
-  border-radius: var(--radius-xl);
-  padding: 0;
-  animation: slideUp 0.3s ease-out;
+  max-height: calc(100vh - 330px);
 }
-
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px 24px;
-  border-bottom: 1px solid var(--glass-border);
-}
-
-.modal-header h2 {
-  font-size: 18px;
-  font-weight: 600;
-  margin: 0;
-}
-
-.modal-body {
-  padding: 24px;
-}
-
-.form-group {
-  margin-bottom: 20px;
-}
-
-.form-group label {
-  display: block;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-primary);
-  margin-bottom: 8px;
-}
-
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  margin-top: 24px;
-  padding-top: 16px;
-  border-top: 1px solid var(--glass-border);
-}
-
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@media (max-width: 1023px) {
-  .search-wrapper {
-    width: 200px;
-  }
-
-  .form-row {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 640px) {
-  .view-header {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .header-actions {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .search-wrapper {
-    width: 100%;
-  }
-
-  .kanban-board {
-    padding: 8px;
-  }
+@media (max-width: 900px) {
+  .search { flex: 1; }
+  .search .input { width: 100%; }
+  .acts { width: 100%; }
+  .col { min-width: 250px; }
 }
 </style>

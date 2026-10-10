@@ -1,180 +1,123 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useProjectStore } from '@/stores/project'
-import { useTaskStore } from '@/stores/task'
-import { useUserStore } from '@/stores/user'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
-  FolderKanban, CheckCircle, Clock, AlertTriangle,
-  TrendingUp, Users, Activity, Plus, ArrowRight
+  FolderKanban, Clock, CheckCircle2, Activity,
+  Plus, ArrowRight, Users, Zap, BarChart3, FolderPlus
 } from 'lucide-vue-next'
-import ProjectCard from '@/components/projects/ProjectCard.vue'
-import TaskCard from '@/components/kanban/TaskCard.vue'
-import StatCard from '@/components/ui/StatCard.vue'
+import StatCard from '../components/StatCard.vue'
+import ProjectCard from '../components/ProjectCard.vue'
+import TaskCard from '../components/TaskCard.vue'
+import { useProjectsStore, useTasksStore, useUsersStore } from '../store'
 
-const projectStore = useProjectStore()
-const taskStore = useTaskStore()
-const userStore = useUserStore()
 const router = useRouter()
+const projects = useProjectsStore()
+const tasksStore = useTasksStore()
+const usersStore = useUsersStore()
 
-const stats = computed(() => [
-  { label: '进行中项目', value: projectStore.activeProjects.length, icon: FolderKanban, color: '#0071e3', trend: '+2 本月' },
-  { label: '待办任务', value: taskStore.taskCounts['todo'] || 0, icon: Clock, color: '#ff9f0a', trend: '需关注' },
-  { label: '进行中任务', value: taskStore.taskCounts['in-progress'] || 0, icon: Activity, color: '#bf5af2', trend: '进行中' },
-  { label: '本周完成', value: 12, icon: CheckCircle, color: '#30d158', trend: '+23%' }
-])
+const stats = computed(() => {
+  const mine = tasksStore.byProject('p1')
+  const done = tasksStore.tasks.filter((t) => t.col === 'done').length
+  return [
+    { label: '进行中项目', value: projects.active.length, icon: FolderKanban, color: '#0071e3', trend: '+1 本季' },
+    { label: '待办任务', value: tasksStore.tasks.filter((t) => t.col === 'todo').length, icon: Clock, color: '#ff9f0a', trend: '需关注' },
+    { label: '进行中任务', value: tasksStore.tasks.filter((t) => t.col === 'doing').length, icon: Activity, color: '#bf5af2', trend: '推进中' },
+    { label: '已完成任务', value: done, icon: CheckCircle2, color: '#30d158', trend: '+18%' }
+  ]
+})
 
-const recentProjects = computed(() =>
-  projectStore.activeProjects.slice(0, 4)
-)
-
-const urgentTasks = computed(() =>
-  taskStore.projectTasks.value
-    .filter(t => t.status !== 'done' && t.priority === 'high')
-    .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))
+const urgent = computed(() =>
+  tasksStore.tasks
+    .filter((t) => t.col !== 'done' && t.priority === 'high')
     .slice(0, 5)
 )
 
-const teamActivity = ref([
-  { user: 'Sarah', action: '完成了任务', target: 'API 文档编写', time: '10分钟前', color: '#30d158' },
-  { user: 'Mike', action: '评论了', target: '认证流程实现', time: '30分钟前', color: '#0071e3' },
-  { user: 'Emily', action: '创建了任务', target: '移动端适配', time: '2小时前', color: '#bf5af2' },
-  { user: 'Alex', action: '更新了项目', target: 'Project Alpha', time: '4小时前', color: '#ff9f0a' }
-])
+const feed = [
+  { name: 'Sarah Chen', text: '完成了任务「编写接口文档」', time: '10 分钟前', color: '#30d158' },
+  { name: 'Mike Wu', text: '评论了「实现 OAuth 登录流程」', time: '30 分钟前', color: '#0071e3' },
+  { name: 'Emily Zhang', text: '创建了任务「新用户引导流程」', time: '2 小时前', color: '#bf5af2' },
+  { name: '林青川', text: '将项目进度更新为 68%', time: '4 小时前', color: '#ff9f0a' }
+]
 
-function navigateTo(path) {
-  router.push(path)
-}
-
-function createProject() {
-  router.push('/projects')
-}
-
-function viewAllTasks() {
-  router.push('/kanban')
-}
+const quick = [
+  { label: '新建任务', icon: Plus, action: () => router.push('/kanban') },
+  { label: '新建项目', icon: FolderPlus, action: () => router.push('/projects') },
+  { label: '邀请成员', icon: Users, action: () => router.push('/team') },
+  { label: '查看报表', icon: BarChart3, action: () => router.push('/stats') }
+]
 </script>
 
 <template>
-  <div class="dashboard">
-    <!-- Stats Grid -->
-    <div class="stats-grid">
-      <StatCard
-        v-for="stat in stats"
-        :key="stat.label"
-        :label="stat.label"
-        :value="stat.value"
-        :icon="stat.icon"
-        :color="stat.color"
-        :trend="stat.trend"
-      />
+  <div>
+    <div class="head">
+      <div>
+        <h1>仪表盘</h1>
+        <p class="sub">欢迎回来，今天也要高效协作 ✨</p>
+      </div>
+      <button class="btn btn-primary" @click="router.push('/kanban')">
+        <Plus :size="16" /> 新建任务
+      </button>
     </div>
 
-    <div class="dashboard-grid">
-      <!-- Projects Section -->
-      <section class="section glass">
-        <div class="section-header">
-          <h2>我的项目</h2>
-          <div class="section-actions">
-            <router-link to="/projects" class="btn btn-ghost btn-sm">
-              查看全部
-              <ArrowRight size="14" />
-            </router-link>
-            <button class="btn btn-primary btn-sm" @click="createProject">
-              <Plus size="14" />
-              新建项目
-            </button>
-          </div>
-        </div>
-        <div class="projects-grid">
-          <ProjectCard
-            v-for="project in recentProjects"
-            :key="project.id"
-            :project="project"
-            @click="navigateTo(`/projects/${project.id}`)"
-          />
-          <div class="project-card add-project" @click="createProject">
-            <div class="add-icon">
-              <Plus size="24" />
-            </div>
-            <h3>新建项目</h3>
-            <p>创建新的项目开始协作</p>
-          </div>
-        </div>
-      </section>
+    <div class="stats">
+      <StatCard v-for="s in stats" :key="s.label" v-bind="s" />
+    </div>
 
-      <!-- Urgent Tasks Section -->
-      <section class="section glass">
-        <div class="section-header">
-          <h2>紧急任务</h2>
-          <router-link to="/kanban" class="btn btn-ghost btn-sm" @click="viewAllTasks">
-            查看看板
-            <ArrowRight size="14" />
+    <div class="grid-2">
+      <section class="panel glass">
+        <div class="p-head">
+          <h2>进行中的项目</h2>
+          <router-link to="/projects" class="btn btn-ghost btn-sm">
+            全部 <ArrowRight :size="14" />
           </router-link>
         </div>
-        <div class="task-list">
-          <TaskCard
-            v-for="task in urgentTasks"
-            :key="task.id"
-            :task="task"
-            :showProject="true"
-            compact
+        <div class="pgrid">
+          <ProjectCard
+            v-for="p in projects.projects.slice(0, 3)"
+            :key="p.id"
+            :project="p"
+            @click="router.push('/projects')"
           />
-          <div v-if="urgentTasks.length === 0" class="empty-state">
-            <CheckCircle size="32" class="empty-icon" />
-            <p>暂无紧急任务，太棒了！</p>
+        </div>
+      </section>
+
+      <section class="panel glass">
+        <div class="p-head">
+          <h2>高优先级任务</h2>
+          <router-link to="/kanban" class="btn btn-ghost btn-sm">
+            看板 <ArrowRight :size="14" />
+          </router-link>
+        </div>
+        <div class="tlist">
+          <TaskCard v-for="t in urgent" :key="t.id" :task="t" />
+          <div v-if="!urgent.length" class="empty">
+            <CheckCircle2 :size="34" />
+            <span>暂无紧急任务，太棒了！</span>
           </div>
         </div>
       </section>
     </div>
 
-    <!-- Bottom Row -->
-    <div class="bottom-grid">
-      <!-- Team Activity -->
-      <section class="section glass">
-        <div class="section-header">
-          <h2>团队动态</h2>
-        </div>
-        <div class="activity-list">
-          <div
-            v-for="(activity, index) in teamActivity"
-            :key="index"
-            class="activity-item"
-          >
-            <div class="activity-dot" :style="{ background: activity.color }" />
-            <div class="activity-content">
-              <p>
-                <strong>{{ activity.user }}</strong>
-                {{ activity.action }}
-                <strong>{{ activity.target }}</strong>
-              </p>
-              <span class="activity-time">{{ activity.time }}</span>
+    <div class="grid-2">
+      <section class="panel glass">
+        <div class="p-head"><h2>团队动态</h2></div>
+        <ul class="feed">
+          <li v-for="(f, i) in feed" :key="i">
+            <i class="fdot" :style="{ background: f.color }"></i>
+            <div>
+              <p><b>{{ f.name }}</b> {{ f.text }}</p>
+              <small>{{ f.time }}</small>
             </div>
-          </div>
-        </div>
+          </li>
+        </ul>
       </section>
 
-      <!-- Quick Actions -->
-      <section class="section glass">
-        <div class="section-header">
-          <h2>快速操作</h2>
-        </div>
-        <div class="quick-actions">
-          <button class="action-btn glass" @click="navigateTo('/kanban')">
-            <Plus size="20" />
-            <span>新建任务</span>
-          </button>
-          <button class="action-btn glass" @click="createProject">
-            <FolderKanban size="20" />
-            <span>新建项目</span>
-          </button>
-          <button class="action-btn glass" @click="navigateTo('/team')">
-            <Users size="20" />
-            <span>邀请成员</span>
-          </button>
-          <button class="action-btn glass" @click="navigateTo('/stats')">
-            <TrendingUp size="20" />
-            <span>查看报表</span>
+      <section class="panel glass">
+        <div class="p-head"><h2>快速操作</h2></div>
+        <div class="quick">
+          <button v-for="q in quick" :key="q.label" class="qbtn" @click="q.action()">
+            <component :is="q.icon" :size="20" />
+            <span>{{ q.label }}</span>
           </button>
         </div>
       </section>
@@ -183,229 +126,112 @@ function viewAllTasks() {
 </template>
 
 <style scoped>
-.dashboard {
-  animation: fadeIn 0.4s ease-out;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 16px;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
 }
-
-.dashboard-grid {
+h1 {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+.sub {
+  font-size: 13px;
+  color: var(--text-2);
+  margin-top: 3px;
+}
+.stats {
   display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 24px;
-  margin-bottom: 24px;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
 }
-
-.section {
-  border-radius: var(--radius-xl);
-  padding: 24px;
-  overflow: hidden;
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
 }
-
-.section-header {
+.panel {
+  border-radius: var(--r-xl);
+  padding: 20px;
+}
+.p-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-  gap: 12px;
+  margin-bottom: 16px;
 }
-
-.section-header h2 {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.section-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.projects-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 16px;
-}
-
-.project-card {
-  display: block;
-  text-decoration: none;
-  color: inherit;
-}
-
-.project-card.add-project {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 32px 24px;
-  text-align: center;
-  border: 2px dashed var(--glass-border);
-  background: transparent;
-  transition: all var(--transition-base);
-}
-
-.project-card.add-project:hover {
-  border-color: var(--accent-blue);
-  background: rgba(0, 113, 227, 0.04);
-}
-
-.add-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-md);
-  background: rgba(0, 113, 227, 0.1);
-  color: var(--accent-blue);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 12px;
-}
-
-.project-card.add-project h3 {
+.p-head h2 {
   font-size: 16px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 4px;
+  font-weight: 700;
 }
-
-.project-card.add-project p {
-  font-size: 13px;
-  color: var(--text-tertiary);
-}
-
-.task-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 40px 24px;
-  text-align: center;
-  color: var(--text-tertiary);
-}
-
-.empty-icon {
-  margin-bottom: 12px;
-  opacity: 0.5;
-}
-
-.bottom-grid {
+.pgrid {
   display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 24px;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
 }
-
-.activity-list {
+.tlist {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
 }
-
-.activity-item {
+.feed {
+  list-style: none;
   display: flex;
-  gap: 12px;
-  padding: 8px 0;
+  flex-direction: column;
+  gap: 14px;
 }
-
-.activity-dot {
+.feed li {
+  display: flex;
+  gap: 11px;
+}
+.fdot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   margin-top: 6px;
   flex-shrink: 0;
 }
-
-.activity-content p {
+.feed p {
   font-size: 13px;
-  color: var(--text-primary);
-  line-height: 1.5;
-  margin-bottom: 4px;
 }
-
-.activity-content strong {
-  font-weight: 600;
-}
-
-.activity-time {
+.feed b { font-weight: 600; }
+.feed small {
   font-size: 11px;
-  color: var(--text-tertiary);
+  color: var(--text-3);
 }
-
-.quick-actions {
+.quick {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
 }
-
-.action-btn {
+.qbtn {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   gap: 8px;
-  padding: 20px 16px;
+  padding: 20px 10px;
+  background: var(--bg-input);
   border: none;
-  background: transparent;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  color: var(--text-secondary);
-}
-
-.action-btn:hover {
-  background: rgba(0, 0, 0, 0.04);
-  color: var(--accent-blue);
-  transform: translateY(-2px);
-}
-
-.action-btn span {
+  border-radius: var(--r-md);
+  color: var(--text-2);
+  font-family: inherit;
   font-size: 13px;
   font-weight: 500;
+  cursor: pointer;
+  transition: all 0.16s;
 }
-
-@media (max-width: 1023px) {
-  .dashboard-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .bottom-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
+.qbtn:hover {
+  background: rgba(0, 113, 227, 0.1);
+  color: var(--blue);
+  transform: translateY(-2px);
 }
-
-@media (max-width: 640px) {
-  .stats-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .projects-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .section {
-    padding: 16px;
-  }
+@media (max-width: 1000px) {
+  .grid-2 { grid-template-columns: 1fr; }
 }
 </style>

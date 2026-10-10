@@ -1,539 +1,288 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { useProjectStore } from '@/stores/project'
-import { useRouter } from 'vue-router'
-import { Plus, Search, Grid, List, Filter, MoreVertical } from 'lucide-vue-next'
-import ProjectCard from '@/components/projects/ProjectCard.vue'
+import { Plus, Search, LayoutGrid, List } from 'lucide-vue-next'
+import ProjectCard from '../components/ProjectCard.vue'
+import Modal from '../components/Modal.vue'
+import { useProjectsStore } from '../store'
 
-const projectStore = useProjectStore()
-const router = useRouter()
+const store = useProjectsStore()
 
-const viewMode = ref('grid')
-const searchQuery = ref('')
-const statusFilter = ref('all')
-const showCreateModal = ref(false)
+const view = ref('grid')
+const q = ref('')
+const filter = ref('all')
+const showNew = ref(false)
 
-const newProject = ref({
+const form = ref({
   name: '',
-  description: '',
+  desc: '',
   status: 'planning',
-  startDate: '',
-  endDate: '',
   color: '#0071e3',
-  icon: 'rocket'
+  icon: '🚀',
+  start: new Date().toISOString().slice(0, 10),
+  end: ''
 })
 
-const filteredProjects = computed(() => {
-  let projects = projectStore.projects
-  if (searchQuery.value) {
-    const query = searchQuery.value.toLowerCase()
-    projects = projects.filter(p =>
-      p.name.toLowerCase().includes(query) ||
-      p.description?.toLowerCase().includes(query)
-    )
+const list = computed(() => {
+  let arr = store.projects
+  if (q.value.trim()) {
+    const s = q.value.toLowerCase()
+    arr = arr.filter((p) => p.name.toLowerCase().includes(s) || p.desc.toLowerCase().includes(s))
   }
-  if (statusFilter.value !== 'all') {
-    projects = projects.filter(p => p.status === statusFilter.value)
-  }
-  return projects
+  if (filter.value !== 'all') arr = arr.filter((p) => p.status === filter.value)
+  return arr
 })
 
-const statusOptions = [
-  { value: 'all', label: '全部' },
-  { value: 'active', label: '进行中' },
-  { value: 'planning', label: '规划中' },
-  { value: 'completed', label: '已完成' }
-]
+const colors = ['#0071e3', '#30d158', '#ff9f0a', '#bf5af2', '#ff2d55', '#64d2ff']
+const icons = ['🚀', '📱', '⚙️', '🎨', '📊', '🌐', '🔐', '⚡']
 
-function navigateToProject(project) {
-  router.push(`/projects/${project.id}`)
+function create() {
+  if (!form.value.name.trim()) return
+  store.add({ ...form.value, end: form.value.end || form.value.start })
+  showNew.value = false
+  form.value = { name: '', desc: '', status: 'planning', color: '#0071e3', icon: '🚀', start: new Date().toISOString().slice(0, 10), end: '' }
 }
-
-function openCreateModal() {
-  newProject.value = {
-    name: '',
-    description: '',
-    status: 'planning',
-    startDate: new Date().toISOString().split('T')[0],
-    endDate: '',
-    color: '#0071e3',
-    icon: 'rocket'
-  }
-  showCreateModal.value = true
-}
-
-function createProject() {
-  if (!newProject.value.name.trim()) return
-  projectStore.addProject(newProject.value)
-  showCreateModal.value = false
-}
-
-const icons = ['rocket', 'smartphone', 'server', 'palette', 'database', 'globe', 'shield', 'zap']
-const colors = ['#0071e3', '#30d158', '#ff9f0a', '#bf5af2', '#ff2d55', '#5e5ce6', '#00c7be', '#ff375f']
 </script>
 
 <template>
-  <div class="projects-view">
-    <!-- Header -->
-    <div class="view-header">
+  <div>
+    <div class="head">
       <div>
         <h1>项目</h1>
-        <p class="view-subtitle">管理所有项目，跟踪进度与协作</p>
+        <p class="sub">共 {{ list.length }} 个项目 · 管理进度与协作</p>
       </div>
-      <div class="header-actions">
-        <div class="search-wrapper">
-          <Search size="18" class="search-icon" />
-          <input
-            type="search"
-            class="search-input input"
-            placeholder="搜索项目..."
-            v-model="searchQuery"
-          />
+      <div class="acts">
+        <div class="search">
+          <Search :size="15" />
+          <input v-model="q" class="input" placeholder="搜索项目…" />
         </div>
-        <div class="view-toggle" role="group" aria-label="视图模式">
-          <button
-            class="btn btn-icon"
-            :class="{ active: viewMode === 'grid' }"
-            @click="viewMode = 'grid'"
-            aria-label="网格视图"
-          >
-            <Grid size="18" />
+        <div class="toggle">
+          <button class="btn btn-icon btn-ghost" :class="{ on: view === 'grid' }" @click="view = 'grid'">
+            <LayoutGrid :size="17" />
           </button>
-          <button
-            class="btn btn-icon"
-            :class="{ active: viewMode === 'list' }"
-            @click="viewMode = 'list'"
-            aria-label="列表视图"
-          >
-            <List size="18" />
+          <button class="btn btn-icon btn-ghost" :class="{ on: view === 'list' }" @click="view = 'list'">
+            <List :size="17" />
           </button>
         </div>
-        <select class="input select" v-model="statusFilter" style="width: auto; min-width: 140px;">
-          <option v-for="opt in statusOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+        <select v-model="filter" class="input" style="width: 120px">
+          <option value="all">全部状态</option>
+          <option value="active">进行中</option>
+          <option value="planning">规划中</option>
+          <option value="completed">已完成</option>
         </select>
-        <button class="btn btn-primary" @click="openCreateModal">
-          <Plus size="16" />
-          新建项目
+        <button class="btn btn-primary" @click="showNew = true">
+          <Plus :size="16" /> 新建项目
         </button>
       </div>
     </div>
 
-    <!-- Projects Grid/List -->
-    <div class="projects-container" :class="viewMode">
-      <ProjectCard
-        v-for="project in filteredProjects"
-        :key="project.id"
-        :project="project"
-        @click="navigateToProject"
-      />
-
-      <div class="project-card add-project" @click="openCreateModal">
-        <div class="add-icon">
-          <Plus size="24" />
+    <div :class="view === 'grid' ? 'grid' : 'rows'">
+      <template v-if="view === 'grid'">
+        <ProjectCard v-for="p in list" :key="p.id" :project="p" />
+        <button class="add-card" @click="showNew = true">
+          <Plus :size="24" />
+          <b>新建项目</b>
+          <span>开始新的协作</span>
+        </button>
+      </template>
+      <template v-else>
+        <div v-for="p in list" :key="p.id" class="row-item glass" @click="view = 'grid'">
+          <span class="rico" :style="{ background: p.color + '1f' }">{{ p.icon }}</span>
+          <div class="rmain">
+            <b>{{ p.name }}</b>
+            <small>{{ p.desc }}</small>
+          </div>
+          <span class="tag" :class="{ 'tag-green': p.status === 'active', 'tag-orange': p.status === 'planning', 'tag-purple': p.status === 'completed' }">
+            {{ p.status === 'active' ? '进行中' : p.status === 'planning' ? '规划中' : '已完成' }}
+          </span>
+          <div class="rbar"><i :style="{ width: p.progress + '%', background: p.color }"></i></div>
+          <span class="rpct">{{ p.progress }}%</span>
         </div>
-        <h3>新建项目</h3>
-        <p>创建新的项目开始协作</p>
+      </template>
+      <div v-if="!list.length" class="empty" style="grid-column: 1/-1">
+        <Search :size="34" />
+        <span>没有匹配的项目</span>
       </div>
     </div>
 
-    <!-- Create Project Modal -->
-    <transition name="fade">
-      <div class="modal-overlay" v-show="showCreateModal" @click.self="showCreateModal = false">
-        <div class="modal glass-strong" role="dialog" aria-modal="true" aria-labelledby="create-project-title">
-          <div class="modal-header">
-            <h2 id="create-project-title">新建项目</h2>
-            <button class="btn btn-icon btn-ghost" @click="showCreateModal = false">
-              <X size="20" />
-            </button>
-          </div>
-          <form @submit.prevent="createProject" class="modal-body">
-            <div class="form-group">
-              <label for="project-name">项目名称 *</label>
-              <input
-                id="project-name"
-                type="text"
-                class="input"
-                v-model="newProject.name"
-                placeholder="输入项目名称"
-                required
-                autofocus
-              />
-            </div>
-            <div class="form-group">
-              <label for="project-description">描述</label>
-              <textarea
-                id="project-description"
-                class="input"
-                v-model="newProject.description"
-                placeholder="项目描述"
-                rows="3"
-              />
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>状态</label>
-                <select class="input select" v-model="newProject.status">
-                  <option value="planning">规划中</option>
-                  <option value="active">进行中</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>开始日期</label>
-                <input type="date" class="input" v-model="newProject.startDate" />
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>预计结束日期</label>
-                <input type="date" class="input" v-model="newProject.endDate" />
-              </div>
-              <div class="form-group">
-                <label>项目颜色</label>
-                <div class="color-picker">
-                  <input
-                    type="color"
-                    v-model="newProject.color"
-                    class="color-input"
-                    @input="$event.target.value = $event.target.value.toUpperCase()"
-                  />
-                  <span class="color-value">{{ newProject.color }}</span>
-                </div>
-              </div>
-            </div>
-            <div class="form-group">
-              <label>图标</label>
-              <div class="icon-picker">
-                <button
-                  v-for="icon in icons"
-                  :key="icon"
-                  type="button"
-                  class="icon-option"
-                  :class="{ active: newProject.icon === icon }"
-                  @click="newProject.icon = icon"
-                >
-                  <component :is="icon" size="20" />
-                </button>
-              </div>
-            </div>
-            <div class="modal-footer">
-              <button type="button" class="btn btn-secondary" @click="showCreateModal = false">取消</button>
-              <button type="submit" class="btn btn-primary">创建项目</button>
-            </div>
-          </form>
+    <transition name="pop">
+      <Modal v-if="showNew" title="新建项目" @close="showNew = false">
+        <div class="form-group">
+          <label>项目名称 *</label>
+          <input v-model="form.name" class="input" placeholder="输入项目名称" autofocus />
         </div>
-      </div>
+        <div class="form-group">
+          <label>项目描述</label>
+          <textarea v-model="form.desc" class="input" placeholder="简单描述这个项目"></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>状态</label>
+            <select v-model="form.status" class="input">
+              <option value="planning">规划中</option>
+              <option value="active">进行中</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>预计完成</label>
+            <input v-model="form.end" type="date" class="input" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>项目图标</label>
+          <div class="pick">
+            <button
+              v-for="i in icons"
+              :key="i"
+              type="button"
+              class="opt"
+              :class="{ on: form.icon === i }"
+              @click="form.icon = i"
+            >{{ i }}</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>主题色</label>
+          <div class="pick">
+            <button
+              v-for="c in colors"
+              :key="c"
+              type="button"
+              class="copt"
+              :class="{ on: form.color === c }"
+              :style="{ background: c }"
+              @click="form.color = c"
+            ></button>
+          </div>
+        </div>
+        <template #foot>
+          <button class="btn btn-secondary" @click="showNew = false">取消</button>
+          <button class="btn btn-primary" @click="create">创建</button>
+        </template>
+      </Modal>
     </transition>
   </div>
 </template>
 
 <style scoped>
-.projects-view {
-  height: 100%;
+.head {
   display: flex;
-  flex-direction: column;
-}
-
-.view-header {
-  display: flex;
-  align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: 24px;
-  flex-wrap: wrap;
   gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
 }
-
-.view-header h1 {
-  font-size: 28px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin: 0;
-}
-
-.view-subtitle {
-  font-size: 14px;
-  color: var(--text-secondary);
-  margin: 4px 0 0;
-}
-
-.header-actions {
+h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
+.sub { font-size: 13px; color: var(--text-2); margin-top: 3px; }
+.acts {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
 }
-
-.search-wrapper {
-  position: relative;
-  width: 280px;
-}
-
-.search-icon {
+.search { position: relative; }
+.search svg {
   position: absolute;
-  left: 14px;
+  left: 12px;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--text-tertiary);
-  pointer-events: none;
+  color: var(--text-3);
 }
-
-.search-input {
-  padding-left: 44px;
-}
-
-.view-toggle {
+.search .input { padding-left: 34px; width: 220px; }
+.toggle {
   display: flex;
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-md);
-  padding: 4px;
-  border: 1px solid var(--glass-border);
+  background: var(--bg-input);
+  border-radius: var(--r-md);
+  padding: 3px;
 }
-
-.view-toggle .btn {
-  color: var(--text-tertiary);
-}
-
-.view-toggle .btn.active {
-  background: var(--bg-secondary);
-  color: var(--accent-blue);
-  box-shadow: var(--shadow-sm);
-}
-
-.projects-container {
-  flex: 1;
-  overflow-y: auto;
-}
-
-.projects-container.grid {
+.toggle .on { background: var(--bg-solid); box-shadow: var(--shadow-sm); color: var(--blue); }
+.grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
 }
-
-.projects-container.list {
+.add-card {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 220px;
+  background: transparent;
+  border: 2px dashed var(--border);
+  border-radius: var(--r-lg);
+  color: var(--text-3);
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s;
 }
-
-.projects-container.list .project-card {
+.add-card:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+  background: rgba(0, 113, 227, 0.04);
+}
+.add-card b { font-size: 15px; }
+.add-card span { font-size: 12px; }
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.row-item {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto 1fr auto 160px 48px;
   align-items: center;
   gap: 16px;
-  padding: 16px 20px;
+  padding: 14px 18px;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition: transform 0.15s;
 }
-
-.projects-container.list .project-header {
-  margin-bottom: 0;
-}
-
-.projects-container.list .project-body {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.projects-container.list .project-description {
-  margin: 0;
-  max-width: 300px;
-}
-
-.projects-container.list .project-progress {
-  width: 200px;
-  flex-direction: row;
-  align-items: center;
-  gap: 12px;
-}
-
-.projects-container.list .progress-bar {
-  width: 100%;
-  max-width: 150px;
-}
-
-.projects-container.list .project-meta {
-  display: flex;
-  gap: 24px;
-  border-top: none;
-  padding-top: 0;
-}
-
-.projects-container.list .project-footer {
-  display: none;
-}
-
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+.row-item:hover { transform: translateX(4px); }
+.rico {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
-  z-index: 1000;
-  animation: fadeIn 0.2s ease-out;
-}
-
-.modal {
-  width: 100%;
-  max-width: 560px;
-  max-height: 90vh;
-  overflow-y: auto;
-  border-radius: var(--radius-xl);
-  padding: 0;
-  animation: slideUp 0.3s ease-out;
-}
-
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px 24px;
-  border-bottom: 1px solid var(--glass-border);
-}
-
-.modal-header h2 {
   font-size: 18px;
-  font-weight: 600;
-  margin: 0;
 }
-
-.modal-body {
-  padding: 24px;
+.rmain b { font-size: 14px; display: block; }
+.rmain small { font-size: 12px; color: var(--text-2); }
+.rbar {
+  height: 7px;
+  background: var(--bg-input);
+  border-radius: 4px;
+  overflow: hidden;
 }
-
-.form-group {
-  margin-bottom: 20px;
-}
-
-.form-group label {
-  display: block;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-primary);
-  margin-bottom: 8px;
-}
-
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  margin-top: 24px;
-  padding-top: 16px;
-  border-top: 1px solid var(--glass-border);
-}
-
-.color-picker {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.color-input {
-  width: 48px;
-  height: 48px;
-  border: none;
-  border-radius: var(--radius-md);
+.rbar i { display: block; height: 100%; border-radius: 4px; }
+.rpct { font-size: 13px; font-weight: 700; text-align: right; }
+.pick { display: flex; gap: 8px; flex-wrap: wrap; }
+.opt {
+  width: 40px;
+  height: 40px;
+  font-size: 18px;
+  background: var(--bg-input);
+  border: 2px solid transparent;
+  border-radius: var(--r-sm);
   cursor: pointer;
-  padding: 0;
+  transition: all 0.15s;
 }
-
-.color-value {
-  font-size: 13px;
-  font-family: monospace;
-  color: var(--text-secondary);
-}
-
-.icon-picker {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.icon-option {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-md);
-  border: 2px solid var(--glass-border);
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.opt.on { border-color: var(--blue); background: rgba(0, 113, 227, 0.1); }
+.copt {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 3px solid transparent;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: transform 0.15s;
 }
-
-.icon-option:hover {
-  border-color: var(--accent-blue);
-  color: var(--accent-blue);
-}
-
-.icon-option.active {
-  border-color: var(--accent-blue);
-  background: rgba(0, 113, 227, 0.1);
-  color: var(--accent-blue);
-}
-
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@media (max-width: 1023px) {
-  .search-wrapper {
-    width: 200px;
-  }
-
-  .form-row {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 640px) {
-  .view-header {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .header-actions {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .search-wrapper {
-    width: 100%;
-  }
-
-  .projects-container.grid {
-    grid-template-columns: 1fr;
-  }
-
-  .projects-container.list .project-card {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-
-  .projects-container.list .project-body {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .projects-container.list .project-description {
-    max-width: none;
-  }
-
-  .projects-container.list .project-progress {
-    width: 100%;
-  }
-
-  .projects-container.list .project-meta {
-    flex-wrap: wrap;
-  }
+.copt.on { border-color: var(--text); transform: scale(1.15); }
+@media (max-width: 900px) {
+  .search .input { width: 100%; }
+  .acts { width: 100%; }
+  .search { flex: 1; }
+  .row-item { grid-template-columns: auto 1fr auto; }
+  .rbar, .rpct { display: none; }
 }
 </style>

@@ -1,632 +1,305 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { useProjectStore } from '@/stores/project'
-import { useTaskStore } from '@/stores/task'
-import { useUserStore } from '@/stores/user'
-import { TrendingUp, TrendingDown, Activity, Target, Clock, CheckCircle, Flag, Users } from 'lucide-vue-next'
-import StatCard from '@/components/ui/StatCard.vue'
+import {
+  Target, CheckCircle2, Flag, Clock, TrendingUp, Layers
+} from 'lucide-vue-next'
+import StatCard from '../components/StatCard.vue'
+import { useProjectsStore, useTasksStore, useUsersStore } from '../store'
 
-const projectStore = useProjectStore()
-const taskStore = useTaskStore()
-const userStore = useUserStore()
+const projects = useProjectsStore()
+const tasksStore = useTasksStore()
+const usersStore = useUsersStore()
 
-const timeRange = ref('month')
-const selectedProjectId = ref('')
+const range = ref('month')
 
-const projects = computed(() => projectStore.projects)
-const allTasks = computed(() => taskStore.tasks)
+const total = computed(() => tasksStore.tasks.length)
+const doneN = computed(() => tasksStore.tasks.filter((t) => t.col === 'done').length)
+const doingN = computed(() => tasksStore.tasks.filter((t) => t.col === 'doing').length)
+const overdueN = computed(() =>
+  tasksStore.tasks.filter((t) => t.col !== 'done' && t.due && new Date(t.due) < new Date()).length
+)
+const rate = computed(() => (total.value ? Math.round((doneN.value / total.value) * 100) : 0))
 
-const filteredTasks = computed(() => {
-  let tasks = allTasks.value
-  if (selectedProjectId.value) {
-    tasks = tasks.filter(t => t.projectId === selectedProjectId.value)
-  }
-  return tasks
-})
+const stats = computed(() => [
+  { label: '总任务数', value: total.value, icon: Target, color: '#0071e3', trend: '全部' },
+  { label: '已完成', value: doneN.value, icon: CheckCircle2, color: '#30d158', trend: '+18%' },
+  { label: '进行中', value: doingN.value, icon: Flag, color: '#ff9f0a', trend: '推进中' },
+  { label: '逾期任务', value: overdueN.value, icon: Clock, color: '#ff453a', trend: overdueN.value ? '需关注' : '良好' },
+  { label: '完成率', value: rate.value + '%', icon: TrendingUp, color: '#bf5af2', trend: '健康' },
+  { label: '活跃项目', value: projects.active.length, icon: Layers, color: '#64d2ff', trend: '进行中' }
+])
 
-const stats = computed(() => {
-  const tasks = filteredTasks.value
-  const total = tasks.length
-  const completed = tasks.filter(t => t.status === 'done').length
-  const inProgress = tasks.filter(t => t.status === 'in-progress').length
-  const overdue = tasks.filter(t => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== 'done').length
-  const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0
-  return { total, completed, inProgress, overdue, completionRate }
-})
-
-const tasksByStatus = computed(() => {
-  const counts = {}
-  taskStore.columns.value.forEach(col => {
-    counts[col.id] = filteredTasks.value.filter(t => t.status === col.id).length
+/* ---- 状态分布环形图 ---- */
+const donut = computed(() => {
+  const segs = tasksStore.columns.map((c) => ({
+    id: c.id,
+    title: c.title,
+    color: c.color,
+    n: tasksStore.tasks.filter((t) => t.col === c.id).length
+  }))
+  const sum = segs.reduce((a, s) => a + s.n, 0) || 1
+  const R = 70
+  const C = 2 * Math.PI * R
+  let acc = 0
+  segs.forEach((s) => {
+    const frac = s.n / sum
+    s.len = frac * C
+    s.gap = C - s.len
+    s.offset = -acc
+    acc += s.len
   })
-  return counts
+  return { segs, sum, C, R }
 })
 
-const tasksByPriority = computed(() => {
-  const priorities = ['high', 'medium', 'low']
-  const counts = {}
-  priorities.forEach(p => {
-    counts[p] = filteredTasks.value.filter(t => t.priority === p).length
-  })
-  return counts
-})
-
-const tasksByAssignee = computed(() => {
-  const assigneeCounts = {}
-  filteredTasks.value.forEach(task => {
-    if (task.assignee) {
-      assigneeCounts[task.assignee] = (assigneeCounts[task.assignee] || 0) + 1
-    }
-  })
-  return Object.entries(assigneeCounts)
-    .map(([id, count]) => ({ user: userStore.getUser(id), count }))
-    .filter(item => item.user)
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 5)
-})
-
-const weeklyProgress = computed(() => {
-  const days = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
-  return days.map((day, i) => ({
-    day,
-    completed: Math.floor(Math.random() * 5) + 1,
-    created: Math.floor(Math.random() * 3) + 1
+/* ---- 优先级分布 ---- */
+const priorities = computed(() => {
+  const map = { high: ['高', '#ff453a'], medium: ['中', '#ff9f0a'], low: ['低', '#30d158'] }
+  return Object.entries(map).map(([k, [text, color]]) => ({
+    key: k,
+    text,
+    color,
+    n: tasksStore.tasks.filter((t) => t.priority === k).length
   }))
 })
+const maxPri = computed(() => Math.max(1, ...priorities.value.map((p) => p.n)))
 
-const projectProgress = computed(() => {
-  return projects.value
-    .filter(p => p.status === 'active')
-    .map(p => ({
-      name: p.name,
-      progress: p.progress,
-      color: p.color
-    }))
+/* ---- 每周完成趋势 ---- */
+const week = ref([
+  { d: '周一', done: 3, new: 2 },
+  { d: '周二', done: 5, new: 4 },
+  { d: '周三', done: 2, new: 3 },
+  { d: '周四', done: 6, new: 2 },
+  { d: '周五', done: 4, new: 5 },
+  { d: '周六', done: 1, new: 1 },
+  { d: '周日', done: 2, new: 0 }
+])
+const maxWeek = computed(() => Math.max(...week.value.map((w) => Math.max(w.done, w.new)), 1))
+
+/* ---- 项目进度 ---- */
+const projProg = computed(() => projects.projects.map((p) => ({ name: p.name, progress: p.progress, color: p.color, icon: p.icon })))
+
+/* ---- 贡献榜 ---- */
+const leaders = computed(() => {
+  const m = {}
+  tasksStore.tasks.forEach((t) => {
+    if (t.assignee) m[t.assignee] = (m[t.assignee] || 0) + 1
+  })
+  return Object.entries(m)
+    .map(([id, n]) => ({ u: usersStore.get(id), n }))
+    .filter((x) => x.u)
+    .sort((a, b) => b.n - a.n)
+    .slice(0, 5)
 })
 </script>
 
 <template>
-  <div class="stats-view">
-    <div class="view-header">
+  <div>
+    <div class="head">
       <div>
         <h1>统计</h1>
-        <p class="view-subtitle">项目进度与团队绩效概览</p>
+        <p class="sub">团队进度与绩效数据洞察</p>
       </div>
-      <div class="header-actions">
-        <select class="input select" v-model="timeRange" style="width: auto;">
-          <option value="week">本周</option>
-          <option value="month">本月</option>
-          <option value="quarter">本季度</option>
-          <option value="year">今年</option>
-        </select>
-        <select class="input select" v-model="selectedProjectId" style="width: auto; min-width: 200px;">
-          <option value="">所有项目</option>
-          <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
-        </select>
-      </div>
+      <select v-model="range" class="input" style="width: 130px">
+        <option value="week">本周</option>
+        <option value="month">本月</option>
+        <option value="quarter">本季度</option>
+        <option value="year">全年</option>
+      </select>
     </div>
 
-    <!-- Key Metrics -->
-    <div class="stats-grid">
-      <StatCard label="总任务数" :value="stats.total" :icon="Target" color="#0071e3" />
-      <StatCard label="已完成" :value="stats.completed" :icon="CheckCircle" color="#30d158" trend="+12%" />
-      <StatCard label="进行中" :value="stats.inProgress" :icon="Flag" color="#ff9f0a" />
-      <StatCard label="逾期" :value="stats.overdue" :icon="Clock" color="#ff3b30" :trend="stats.overdue > 0 ? '需关注' : '良好'" />
-      <StatCard label="完成率" :value="stats.completionRate + '%'" :icon="TrendingUp" color="#bf5af2" />
-      <StatCard label="活跃项目" :value="projectStore.activeProjects.length" :icon="Activity" color="#00c7be" />
+    <div class="stats">
+      <StatCard v-for="s in stats" :key="s.label" v-bind="s" />
     </div>
 
-    <!-- Charts Row -->
-    <div class="charts-grid">
-      <section class="chart-card glass">
-        <div class="chart-header">
-          <h2>任务状态分布</h2>
-        </div>
-        <div class="chart-content">
-          <div class="donut-chart">
-            <svg viewBox="0 0 200 200" class="donut-svg">
-              <circle cx="100" cy="100" r="80" fill="none" stroke="var(--bg-tertiary)" stroke-width="20" />
+    <div class="grid-2">
+      <!-- 状态分布 -->
+      <section class="panel glass">
+        <h2>任务状态分布</h2>
+        <div class="donut-wrap">
+          <div class="donut">
+            <svg viewBox="0 0 160 160">
+              <circle cx="80" cy="80" :r="donut.R" fill="none" stroke="var(--bg-input)" stroke-width="22" />
               <circle
-                v-for="(count, status) in tasksByStatus"
-                :key="status"
-                cx="100" cy="100" r="80"
+                v-for="s in donut.segs"
+                :key="s.id"
+                cx="80" cy="80" :r="donut.R"
                 fill="none"
-                :stroke="statusColors[status]"
-                stroke-width="20"
-                :stroke-dasharray="circumference"
-                :stroke-dashoffset="getOffset(status)"
-                stroke-linecap="round"
-                transform="rotate(-90 100 100)"
+                :stroke="s.color"
+                stroke-width="22"
+                :stroke-dasharray="`${s.len} ${s.gap}`"
+                :stroke-dashoffset="s.offset"
+                stroke-linecap="butt"
+                transform="rotate(-90 80 80)"
               />
             </svg>
             <div class="donut-center">
-              <span class="donut-total">{{ filteredTasks.length }}</span>
-              <span class="donut-label">总任务</span>
+              <b>{{ donut.sum }}</b>
+              <small>总任务</small>
             </div>
           </div>
-          <div class="chart-legend">
-            <div
-              v-for="col in taskStore.columns"
-              :key="col.id"
-              class="legend-item"
-            >
-              <span class="legend-color" :style="{ background: col.color }" />
-              <span class="legend-label">{{ col.title }}</span>
-              <span class="legend-value">{{ tasksByStatus[col.id] || 0 }}</span>
-            </div>
-          </div>
+          <ul class="legend">
+            <li v-for="s in donut.segs" :key="s.id">
+              <i :style="{ background: s.color }"></i>
+              <span>{{ s.title }}</span>
+              <b>{{ s.n }}</b>
+            </li>
+          </ul>
         </div>
       </section>
 
-      <section class="chart-card glass">
-        <div class="chart-header">
-          <h2>优先级分布</h2>
-        </div>
-        <div class="chart-content">
-          <div class="bar-chart">
-            <div
-              v-for="priority in ['high', 'medium', 'low']"
-              :key="priority"
-              class="bar-item"
-            >
-              <div class="bar-label">
-                <span class="priority-dot" :style="{ background: priorityColors[priority] }" />
-                <span>{{ priorityLabels[priority] }}</span>
-              </div>
-              <div class="bar-wrapper">
-                <div
-                  class="bar"
-                  :style="{
-                    width: stats.total > 0 ? (tasksByPriority[priority] / stats.total * 100) + '%' : '0%',
-                    background: priorityColors[priority]
-                  }"
-                />
-                <span class="bar-value">{{ tasksByPriority[priority] }}</span>
-              </div>
+      <!-- 优先级 -->
+      <section class="panel glass">
+        <h2>优先级分布</h2>
+        <div class="bars">
+          <div v-for="p in priorities" :key="p.key" class="bar-row">
+            <span class="b-label" :style="{ color: p.color }">{{ p.text }}</span>
+            <div class="b-track">
+              <i :style="{ width: (p.n / maxPri) * 100 + '%', background: p.color }"></i>
             </div>
+            <b class="b-num">{{ p.n }}</b>
+          </div>
+        </div>
+
+        <h2 style="margin-top: 24px">项目进度</h2>
+        <div class="bars">
+          <div v-for="p in projProg" :key="p.name" class="bar-row">
+            <span class="b-label">{{ p.icon }} {{ p.name }}</span>
+            <div class="b-track">
+              <i :style="{ width: p.progress + '%', background: p.color }"></i>
+            </div>
+            <b class="b-num">{{ p.progress }}%</b>
           </div>
         </div>
       </section>
     </div>
 
-    <!-- Second Row -->
-    <div class="charts-grid">
-      <section class="chart-card glass">
-        <div class="chart-header">
-          <h2>每周完成趋势</h2>
+    <div class="grid-2">
+      <!-- 周趋势 -->
+      <section class="panel glass">
+        <h2>每周完成趋势</h2>
+        <div class="wchart">
+          <div v-for="w in week" :key="w.d" class="wcol">
+            <div class="wbars">
+              <i class="wb done" :style="{ height: (w.done / maxWeek) * 100 + '%' }" :title="w.done + ' 完成'"></i>
+              <i class="wb new" :style="{ height: (w.new / maxWeek) * 100 + '%' }" :title="w.new + ' 新建'"></i>
+            </div>
+            <small>{{ w.d }}</small>
+          </div>
         </div>
-        <div class="chart-content">
-          <div class="line-chart">
-            <div class="chart-bars">
-              <div
-                v-for="week in weeklyProgress"
-                :key="week.day"
-                class="week-bar-group"
-              >
-                <div class="bar completed" :style="{ height: (week.completed / 8 * 100) + '%' }" :title="week.completed + ' 完成'" />
-                <div class="bar created" :style="{ height: (week.created / 8 * 100) + '%' }" :title="week.created + ' 新建'" />
-              </div>
-            </div>
-            <div class="chart-x-axis">
-              <span v-for="week in weeklyProgress" :key="week.day">{{ week.day }}</span>
-            </div>
-          </div>
-          <div class="chart-legend small">
-            <div class="legend-item"><span class="legend-color" style="background: #30d158" /> 已完成</div>
-            <div class="legend-item"><span class="legend-color" style="background: #0071e3" /> 新建</div>
-          </div>
+        <div class="wlegend">
+          <span><i style="background:#30d158"></i> 已完成</span>
+          <span><i style="background:#0071e3"></i> 新建</span>
         </div>
       </section>
 
-      <section class="chart-card glass">
-        <div class="chart-header">
-          <h2>项目进度</h2>
-        </div>
-        <div class="chart-content">
-          <div class="project-progress-list">
-            <div
-              v-for="proj in projectProgress"
-              :key="proj.name"
-              class="project-progress-item"
-            >
-              <div class="proj-info">
-                <span class="proj-name">{{ proj.name }}</span>
-                <span class="proj-percent">{{ proj.progress }}%</span>
-              </div>
-              <div class="proj-bar">
-                <div class="proj-fill" :style="{ width: proj.progress + '%', background: proj.color }" />
-              </div>
-            </div>
-            <div v-if="projectProgress.length === 0" class="empty-state">
-              暂无活跃项目
-            </div>
-          </div>
-        </div>
-      </section>
-    </div>
-
-    <!-- Top Contributors -->
-    <section class="chart-card glass">
-      <div class="chart-header">
+      <!-- 贡献榜 -->
+      <section class="panel glass">
         <h2>贡献榜</h2>
-      </div>
-      <div class="chart-content">
-        <div class="contributors-list">
-          <div
-            v-for="(item, index) in tasksByAssignee"
-            :key="item.user.id"
-            class="contributor-item"
-          >
-            <span class="rank">{{ index + 1 }}</span>
-            <img :src="item.user.avatar" :alt="item.user.name" class="contributor-avatar" />
-            <div class="contributor-info">
-              <span class="contributor-name">{{ item.user.name }}</span>
-              <span class="contributor-role">{{ item.user.role }}</span>
+        <ol class="leads">
+          <li v-for="(l, i) in leaders" :key="l.u.id">
+            <em :class="'rank r' + (i + 1)">{{ i + 1 }}</em>
+            <img :src="l.u.avatar" :alt="l.u.name" />
+            <div>
+              <b>{{ l.u.name }}</b>
+              <small>{{ l.u.role === 'admin' ? '管理员' : '成员' }}</small>
             </div>
-            <span class="contributor-count">{{ item.count }} 任务</span>
-          </div>
-          <div v-if="tasksByAssignee.length === 0" class="empty-state">暂无数据</div>
-        </div>
-      </div>
-    </section>
+            <span class="n">{{ l.n }} 任务</span>
+          </li>
+          <div v-if="!leaders.length" class="empty">暂无数据</div>
+        </ol>
+      </section>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.stats-view {
-  height: 100%;
+.head {
   display: flex;
-  flex-direction: column;
-}
-
-.view-header {
-  display: flex;
-  align-items: flex-start;
   justify-content: space-between;
+  gap: 16px;
   margin-bottom: 20px;
   flex-wrap: wrap;
-  gap: 16px;
 }
-
-.view-header h1 {
-  font-size: 28px;
-  font-weight: 700;
-  margin: 0;
-}
-
-.view-subtitle {
-  font-size: 14px;
-  color: var(--text-secondary);
-  margin: 4px 0 0;
-}
-
-.stats-grid {
+h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
+.sub { font-size: 13px; color: var(--text-2); margin-top: 3px; }
+.stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
   margin-bottom: 20px;
 }
-
-.charts-grid {
+.grid-2 {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(480px, 1fr));
-  gap: 20px;
-  margin-bottom: 20px;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
 }
-
-.chart-card {
-  border-radius: var(--radius-xl);
-  padding: 24px;
-}
-
-.chart-header {
-  margin-bottom: 20px;
-}
-
-.chart-header h2 {
-  font-size: 16px;
-  font-weight: 600;
-  margin: 0;
-}
-
-.chart-content {
-  display: flex;
-  align-items: center;
-  gap: 32px;
-}
-
-.donut-chart {
-  position: relative;
-  width: 160px;
-  height: 160px;
-  flex-shrink: 0;
-}
-
-.donut-svg {
-  width: 100%;
-  height: 100%;
-}
-
+.panel { border-radius: var(--r-xl); padding: 22px; }
+.panel h2 { font-size: 15px; font-weight: 700; margin-bottom: 18px; }
+.donut-wrap { display: flex; align-items: center; gap: 28px; flex-wrap: wrap; }
+.donut { position: relative; width: 160px; height: 160px; flex-shrink: 0; }
+.donut svg { width: 100%; height: 100%; }
 .donut-center {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  text-align: center;
-  pointer-events: none;
-}
-
-.donut-total {
-  display: block;
-  font-size: 28px;
-  font-weight: 700;
-  color: var(--text-primary);
-  line-height: 1;
-}
-
-.donut-label {
-  font-size: 12px;
-  color: var(--text-tertiary);
-}
-
-.chart-legend {
+  inset: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-}
-
-.legend-item {
-  display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 13px;
+  justify-content: center;
 }
-
-.legend-color {
-  width: 12px;
-  height: 12px;
-  border-radius: 3px;
-  flex-shrink: 0;
-}
-
-.legend-label {
-  flex: 1;
-  color: var(--text-secondary);
-}
-
-.legend-value {
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.bar-chart {
-  width: 100%;
-}
-
-.bar-item {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.bar-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-.priority-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-}
-
-.bar-wrapper {
+.donut-center b { font-size: 28px; font-weight: 800; letter-spacing: -1px; }
+.donut-center small { font-size: 11px; color: var(--text-3); }
+.legend { list-style: none; display: flex; flex-direction: column; gap: 11px; flex: 1; min-width: 140px; }
+.legend li { display: flex; align-items: center; gap: 9px; font-size: 13px; }
+.legend i { width: 11px; height: 11px; border-radius: 3px; }
+.legend span { flex: 1; color: var(--text-2); }
+.legend b { font-weight: 700; }
+.bars { display: flex; flex-direction: column; gap: 14px; }
+.bar-row { display: flex; align-items: center; gap: 12px; }
+.b-label { min-width: 92px; font-size: 13px; color: var(--text-2); }
+.b-track { flex: 1; height: 22px; background: var(--bg-input); border-radius: 6px; overflow: hidden; }
+.b-track i { display: block; height: 100%; border-radius: 6px; transition: width 0.5s ease; }
+.b-num { min-width: 40px; text-align: right; font-size: 13px; }
+.wchart { display: flex; gap: 8px; align-items: flex-end; height: 170px; }
+.wcol { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; height: 100%; }
+.wbars { flex: 1; display: flex; align-items: flex-end; gap: 3px; width: 100%; justify-content: center; }
+.wb { width: 14px; border-radius: 5px 5px 0 0; min-height: 3px; transition: height 0.4s ease; }
+.wb.done { background: var(--green); }
+.wb.new { background: var(--blue); opacity: 0.55; }
+.wcol small { font-size: 11px; color: var(--text-3); }
+.wlegend { display: flex; gap: 18px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border-glass); font-size: 12px; color: var(--text-2); }
+.wlegend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+.leads { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.leads li {
   display: flex;
   align-items: center;
   gap: 12px;
-  height: 24px;
+  padding: 11px 13px;
+  background: var(--bg-input);
+  border-radius: var(--r-md);
 }
-
-.bar {
-  height: 100%;
-  border-radius: var(--radius-sm);
-  transition: width 0.5s ease-out;
-  min-width: 20px;
-}
-
-.bar-value {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-  min-width: 30px;
-}
-
-.line-chart {
-  width: 100%;
-}
-
-.chart-bars {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  height: 160px;
-  gap: 8px;
-  padding-bottom: 8px;
-}
-
-.week-bar-group {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  flex: 1;
-  height: 100%;
-  justify-content: flex-end;
-}
-
-.bar {
-  width: 100%;
-  max-width: 32px;
-  border-radius: 4px 4px 0 0;
-  transition: height 0.3s ease-out;
-}
-
-.bar.completed { background: #30d158; }
-.bar.created { background: #0071e3; opacity: 0.6; }
-
-.chart-x-axis {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 12px;
-  font-size: 11px;
-  color: var(--text-tertiary);
-}
-
-.chart-legend.small {
-  display: flex;
-  gap: 16px;
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--glass-border);
-}
-
-.project-progress-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.project-progress-item {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.proj-info {
-  display: flex;
-  justify-content: space-between;
-  font-size: 13px;
-}
-
-.proj-name { color: var(--text-primary); }
-.proj-percent { color: var(--text-secondary); font-weight: 600; }
-
-.proj-bar {
-  height: 8px;
-  background: var(--bg-tertiary);
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.proj-fill {
-  height: 100%;
-  border-radius: 4px;
-  transition: width 0.5s ease-out;
-}
-
-.contributors-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.contributor-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  border-radius: var(--radius-md);
-  transition: background var(--transition-fast);
-}
-
-.contributor-item:hover {
-  background: rgba(0, 0, 0, 0.02);
-}
-
+.leads img { width: 36px; height: 36px; border-radius: 50%; background: var(--bg-soft); }
+.leads b { display: block; font-size: 14px; }
+.leads small { font-size: 11px; color: var(--text-3); }
+.leads .n { margin-left: auto; font-size: 13px; font-weight: 700; color: var(--blue); }
 .rank {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
-  background: var(--bg-tertiary);
-  color: var(--text-tertiary);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 800;
+  font-style: normal;
+  background: var(--bg-solid);
+  color: var(--text-3);
   flex-shrink: 0;
 }
-
-.contributor-item:nth-child(1) .rank { background: #ffd700; color: #1d1d1f; }
-.contributor-item:nth-child(2) .rank { background: #c0c0c0; color: #1d1d1f; }
-.contributor-item:nth-child(3) .rank { background: #cd7f32; color: white; }
-
-.contributor-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  object-fit: cover;
-}
-
-.contributor-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.contributor-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.contributor-role {
-  font-size: 11px;
-  color: var(--text-tertiary);
-}
-
-.contributor-count {
-  margin-left: auto;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--accent-blue);
-}
-
-.empty-state {
-  padding: 40px 20px;
-  text-align: center;
-  color: var(--text-tertiary);
-}
-
-@media (max-width: 1023px) {
-  .charts-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .chart-content {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 20px;
-  }
-
-  .donut-chart {
-    margin: 0 auto;
-  }
-}
-
-@media (max-width: 640px) {
-  .view-header {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .header-actions {
-    flex-direction: column;
-    align-items: stretch;
-  }
+.r1 { background: #ffd60a; color: #1d1d1f; }
+.r2 { background: #d1d1d6; color: #1d1d1f; }
+.r3 { background: #e8a87c; color: #fff; }
+@media (max-width: 1000px) {
+  .grid-2 { grid-template-columns: 1fr; }
 }
 </style>
