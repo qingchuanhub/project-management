@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Redirecting...</title>
+    <script>
+      // GitHub Pages 404 重定向到首页
+      // 将 /project-management/xxx 重定向到 /project-management/?/xxx
+      var pathSegments = window.location.pathname.split('/');
+      // 找到 project-management 的位置
+      var repoIndex = pathSegments.indexOf('project-management');
+      if (repoIndex !== -1) {
+        // 取出 project-management 之后的路径
+        var subPath = pathSegments.slice(repoIndex + 1).join('/');
+        if (subPath) {
+          // 重定向到首页，把路径放在 query 参数里
+          window.location.replace('/project-management/?' + subPath);
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <p>Redirecting...</p>
+  </body>
+</html>
