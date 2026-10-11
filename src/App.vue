@@ -58,6 +58,13 @@ function logout() {
     <router-view />
   </div>
   <div v-else class="app" :class="{ collapsed }">
+    <!-- 装饰性背景光晕（毛玻璃模糊层） -->
+    <div class="bg-decor" aria-hidden="true">
+      <i class="blob b1"></i>
+      <i class="blob b2"></i>
+      <i class="blob b3"></i>
+      <i class="blob b4"></i>
+    </div>
     <!-- 侧边栏 -->
     <aside class="sidebar glass-strong" :class="{ open: mobileOpen }">
       <div class="side-head">
@@ -177,7 +184,29 @@ function logout() {
   display: flex;
   height: 100vh;
   background: var(--bg);
+  position: relative;
+  overflow: hidden;
 }
+
+/* ---- 装饰背景光晕 ---- */
+.bg-decor {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.45;
+}
+.dark .blob { opacity: 0.3; }
+.b1 { width: 480px; height: 480px; background: #0071e3; top: -140px; right: -80px; }
+.b2 { width: 420px; height: 420px; background: #bf5af2; bottom: -120px; left: 30%; }
+.b3 { width: 340px; height: 340px; background: #30d158; top: 40%; left: -100px; opacity: 0.3; }
+.b4 { width: 300px; height: 300px; background: #ff9f0a; bottom: 10%; right: 15%; opacity: 0.25; }
 
 /* ---- 侧边栏 ---- */
 .sidebar {
@@ -314,6 +343,8 @@ function logout() {
   flex-direction: column;
   min-width: 0;
   transition: margin-left 0.25s ease;
+  position: relative;
+  z-index: 1;
 }
 .app.collapsed .main {
   margin-left: 76px;
