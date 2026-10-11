@@ -1,10 +1,13 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import {
-  User, Bell, Palette, Shield, Database, Save, Download, Trash2, Check
+  User, Bell, Palette, Shield, Database, Save, Download, Trash2, Check, AlertTriangle
 } from 'lucide-vue-next'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '../store'
+import Modal from '../components/Modal.vue'
 
+const router = useRouter()
 const auth = useAuthStore()
 const me = computed(() => auth.session || { name: '未登录', email: '', avatar: '' })
 
@@ -63,6 +66,22 @@ async function saveProfile() {
     timezone: profile.value.timezone
   })
   save(r.ok ? '个人资料已保存' : r.msg || '保存失败')
+}
+
+const showDelete = ref(false)
+const deleting = ref(false)
+const deleteErr = ref('')
+
+async function confirmDelete() {
+  deleting.value = true
+  deleteErr.value = ''
+  const r = await auth.deleteAccount()
+  deleting.value = false
+  if (r.ok) {
+    router.push('/login')
+  } else {
+    deleteErr.value = r.msg || '删除失败'
+  }
 }
 </script>
 
@@ -201,7 +220,7 @@ async function saveProfile() {
                 <b>删除账号</b>
                 <small>永久删除账号与全部数据，不可恢复</small>
               </div>
-              <button class="btn btn-danger btn-sm" @click="save('演示环境不可删除')"><Trash2 :size="14" /> 删除账号</button>
+              <button class="btn btn-danger btn-sm" @click="showDelete = true"><Trash2 :size="14" /> 删除账号</button>
             </div>
           </div>
         </template>
@@ -228,6 +247,23 @@ async function saveProfile() {
         </template>
       </div>
     </div>
+
+    <!-- 删除账号确认 -->
+    <Modal v-if="showDelete" title="删除账号" @close="showDelete = false">
+      <div class="del-body">
+        <AlertTriangle :size="28" class="del-icon" />
+        <p>确定要删除账号吗？</p>
+        <p class="del-sub">账号与相关数据将被永久删除，此操作不可恢复。</p>
+        <p v-if="deleteErr" class="del-err">{{ deleteErr }}</p>
+      </div>
+      <template #foot>
+        <button class="btn btn-secondary" @click="showDelete = false" :disabled="deleting">取消</button>
+        <button class="btn btn-danger" @click="confirmDelete" :disabled="deleting">
+          <template v-if="deleting">删除中…</template>
+          <template v-else><Trash2 :size="15" /> 确认删除</template>
+        </button>
+      </template>
+    </Modal>
   </div>
 </template>
 
@@ -382,6 +418,11 @@ h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
 }
 .data-row b { font-size: 14px; display: block; }
 .data-row small { font-size: 12px; color: var(--text-3); }
+.del-body { text-align: center; padding: 8px 0 4px; }
+.del-icon { color: var(--red); margin-bottom: 10px; }
+.del-body p { font-size: 15px; font-weight: 600; }
+.del-sub { font-size: 13px !important; font-weight: 400 !important; color: var(--text-2); margin-top: 6px; }
+.del-err { font-size: 13px !important; font-weight: 400 !important; color: var(--red); margin-top: 10px; }
 @media (max-width: 900px) {
   .layout { grid-template-columns: 1fr; }
   .tabs { flex-direction: row; overflow-x: auto; position: static; }

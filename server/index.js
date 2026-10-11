@@ -214,6 +214,27 @@ async function main() {
     res.json({ user: publicUser(dbGet('SELECT * FROM users WHERE id = ?', [u.id])) })
   })
 
+  app.delete('/api/auth/me', authRequired, function (req, res) {
+    const u = req.user
+    // 不删种子数据用户
+    if (/^u[1-5]$/.test(u.id)) {
+      return res.status(400).json({ error: '演示账号不可删除' })
+    }
+    dbRun('DELETE FROM users WHERE id = ?', [u.id])
+    // 把该用户的任务转为未分配，项目成员列表中移除
+    dbRun("UPDATE tasks SET assignee = '' WHERE assignee = ?", [u.id])
+    const projects = dbAll('SELECT id, members FROM projects')
+    for (let i = 0; i < projects.length; i++) {
+      const members = parseJson(projects[i].members, [])
+      if (members.indexOf(u.id) > -1) {
+        const next = members.filter(function (m) { return m !== u.id })
+        dbRun('UPDATE projects SET members = ? WHERE id = ?', [JSON.stringify(next), projects[i].id])
+      }
+    }
+    saveDb()
+    res.json({ ok: true })
+  })
+
   app.get('/api/bootstrap', authRequired, function (req, res) {
     const users = dbAll('SELECT * FROM users').map(publicUser)
     const projects = dbAll('SELECT * FROM projects').map(rowToProject)

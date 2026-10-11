@@ -113,7 +113,27 @@ export const useAuthStore = defineStore('auth', () => {
     return { ok: true }
   }
 
-  return { session, isAuthed, register, login, logout, updateProfile }
+  async function deleteAccount() {
+    if (isServerMode()) {
+      try {
+        await api('/auth/me', { method: 'DELETE' })
+        logout()
+        return { ok: true }
+      } catch (e) {
+        return { ok: false, msg: e.message }
+      }
+    }
+    // 本地模式：从 accounts 移除
+    const email = session.value && session.value.email
+    if (email) {
+      accounts.value = accounts.value.filter((a) => a.email !== email)
+      localStorage.setItem(ACC_KEY, JSON.stringify(accounts.value))
+    }
+    logout()
+    return { ok: true }
+  }
+
+  return { session, isAuthed, register, login, logout, updateProfile, deleteAccount }
 })
 
 /* ============ 用户 ============ */
