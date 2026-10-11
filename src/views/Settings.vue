@@ -55,6 +55,15 @@ function save(msg) {
   toast.value = msg
   setTimeout(() => (toast.value = ''), 2200)
 }
+
+async function saveProfile() {
+  const r = await auth.updateProfile({
+    name: profile.value.name,
+    bio: profile.value.bio,
+    timezone: profile.value.timezone
+  })
+  save(r.ok ? '个人资料已保存' : r.msg || '保存失败')
+}
 </script>
 
 <template>
@@ -118,7 +127,7 @@ function save(msg) {
                 <option>Europe/London (UTC+0)</option>
               </select>
             </div>
-            <button class="btn btn-primary" @click="save('个人资料已保存')"><Save :size="15" /> 保存更改</button>
+            <button class="btn btn-primary" @click="saveProfile"><Save :size="15" /> 保存更改</button>
           </div>
         </template>
 

@@ -2,11 +2,15 @@
 import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { Eye, EyeOff, ArrowRight, Check, AlertCircle } from 'lucide-vue-next'
-import { useAuthStore } from '../store'
+import { useAuthStore, useUsersStore, useProjectsStore, useTasksStore } from '../store'
+import { isServerMode, api } from '../api'
 
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
+const usersStore = useUsersStore()
+const projectsStore = useProjectsStore()
+const tasksStore = useTasksStore()
 
 const mode = ref('login') // login | register
 const showPass = ref(false)
@@ -19,23 +23,31 @@ function switchMode(m) {
   error.value = ''
 }
 
-function submit() {
+async function submit() {
   error.value = ''
   loading.value = true
-  // 轻微延迟模拟请求
-  setTimeout(() => {
+  try {
     const r =
       mode.value === 'login'
-        ? auth.login(form.value.email, form.value.password)
-        : auth.register(form.value.name, form.value.email, form.value.password)
-    loading.value = false
+        ? await auth.login(form.value.email, form.value.password)
+        : await auth.register(form.value.name, form.value.email, form.value.password)
     if (r.ok) {
+      if (isServerMode()) {
+        try {
+          const d = await api('/bootstrap')
+          usersStore.hydrate(d.users)
+          projectsStore.hydrate(d.projects)
+          tasksStore.hydrate(d.tasks)
+        } catch (e) { console.warn(e) }
+      }
       const to = route.query.redirect || '/dashboard'
       router.push(String(to))
     } else {
       error.value = r.msg
     }
-  }, 400)
+  } finally {
+    loading.value = false
+  }
 }
 
 function demo() {

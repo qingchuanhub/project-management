@@ -1,5 +1,120 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { api, isServerMode, setToken } from './api'
+
+/* ============ 认证 ============ */
+const ACC_KEY = 'pf_accounts'
+const SES_KEY = 'pf_session'
+
+function loadAccounts() {
+  try {
+    const list = JSON.parse(localStorage.getItem(ACC_KEY) || '[]')
+    if (!list.length) {
+      const demo = { id: 'u1', name: '林青川', email: 'demo@demo.com', pass: btoa('123456'), avatar: 'https://api.dicebear.com/9.x/notionists/svg?seed=lin' }
+      list.push(demo)
+      localStorage.setItem(ACC_KEY, JSON.stringify(list))
+    }
+    return list
+  } catch {
+    return []
+  }
+}
+
+export const useAuthStore = defineStore('auth', () => {
+  const session = ref(JSON.parse(localStorage.getItem(SES_KEY) || 'null'))
+  const accounts = ref(loadAccounts())
+  const isAuthed = computed(() => !!session.value)
+
+  function persist() {
+    if (session.value) localStorage.setItem(SES_KEY, JSON.stringify(session.value))
+    else localStorage.removeItem(SES_KEY)
+  }
+
+  async function register(name, email, password) {
+    email = (email || '').trim().toLowerCase()
+    if (!name || !email || !password) return { ok: false, msg: '请填写完整信息' }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, msg: '邮箱格式不正确' }
+    if (password.length < 6) return { ok: false, msg: '密码至少 6 位' }
+
+    if (isServerMode()) {
+      try {
+        const d = await api('/auth/register', {
+          method: 'POST',
+          body: JSON.stringify({ name, email, password })
+        })
+        setToken(d.token)
+        session.value = d.user
+        persist()
+        return { ok: true }
+      } catch (e) {
+        return { ok: false, msg: e.message }
+      }
+    }
+
+    if (accounts.value.some((a) => a.email === email)) return { ok: false, msg: '该邮箱已注册' }
+    const acc = {
+      id: 'u' + Date.now(),
+      name: name.trim(),
+      email,
+      pass: btoa(password),
+      avatar: `https://api.dicebear.com/9.x/notionists/svg?seed=${encodeURIComponent(email)}`
+    }
+    accounts.value.push(acc)
+    localStorage.setItem(ACC_KEY, JSON.stringify(accounts.value))
+    session.value = { id: acc.id, name: acc.name, email: acc.email, avatar: acc.avatar }
+    persist()
+    return { ok: true }
+  }
+
+  async function login(email, password) {
+    email = (email || '').trim().toLowerCase()
+
+    if (isServerMode()) {
+      try {
+        const d = await api('/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ email, password })
+        })
+        setToken(d.token)
+        session.value = d.user
+        persist()
+        return { ok: true }
+      } catch (e) {
+        return { ok: false, msg: e.message }
+      }
+    }
+
+    const acc = accounts.value.find((a) => a.email === email)
+    if (!acc || acc.pass !== btoa(password)) return { ok: false, msg: '邮箱或密码错误' }
+    session.value = { id: acc.id, name: acc.name, email: acc.email, avatar: acc.avatar }
+    persist()
+    return { ok: true }
+  }
+
+  function logout() {
+    setToken('')
+    session.value = null
+    persist()
+  }
+
+  async function updateProfile(patch) {
+    if (isServerMode()) {
+      try {
+        const d = await api('/auth/me', { method: 'PATCH', body: JSON.stringify(patch) })
+        session.value = { ...session.value, ...d.user }
+        persist()
+        return { ok: true }
+      } catch (e) {
+        return { ok: false, msg: e.message }
+      }
+    }
+    session.value = { ...session.value, ...patch }
+    persist()
+    return { ok: true }
+  }
+
+  return { session, isAuthed, register, login, logout, updateProfile }
+})
 
 /* ============ 用户 ============ */
 export const useUsersStore = defineStore('users', () => {
@@ -12,89 +127,68 @@ export const useUsersStore = defineStore('users', () => {
   ])
 
   const get = (id) => users.value.find((u) => u.id === id)
+  const hydrate = (list) => { users.value = list }
 
-  return { users, get }
+  return { users, get, hydrate }
 })
 
 /* ============ 项目 ============ */
 export const useProjectsStore = defineStore('projects', () => {
   const projects = ref([
     {
-      id: 'p1',
-      name: 'Project Alpha',
-      desc: '核心产品重构与体验升级',
-      status: 'active',
-      progress: 68,
-      start: '2026-07-01',
-      end: '2026-11-30',
-      color: '#0071e3',
-      icon: '🚀',
-      members: ['1', '2', '3'],
-      tags: ['产品', '重构']
+      id: 'p1', name: 'Project Alpha', desc: '核心产品重构与体验升级',
+      status: 'active', progress: 68, start: '2026-07-01', end: '2026-11-30',
+      color: '#0071e3', icon: '🚀', members: ['1', '2', '3'], tags: ['产品', '重构']
     },
     {
-      id: 'p2',
-      name: '移动端 App 2.0',
-      desc: '全新架构的跨平台移动应用',
-      status: 'active',
-      progress: 35,
-      start: '2026-08-15',
-      end: '2026-12-31',
-      color: '#30d158',
-      icon: '📱',
-      members: ['2', '4'],
-      tags: ['移动端']
+      id: 'p2', name: '移动端 App 2.0', desc: '全新架构的跨平台移动应用',
+      status: 'active', progress: 35, start: '2026-08-15', end: '2026-12-31',
+      color: '#30d158', icon: '📱', members: ['2', '4'], tags: ['移动端']
     },
     {
-      id: 'p3',
-      name: 'API 网关迁移',
-      desc: '迁移至微服务架构，提升可用性',
-      status: 'planning',
-      progress: 12,
-      start: '2026-09-01',
-      end: '2027-02-28',
-      color: '#ff9f0a',
-      icon: '⚙️',
-      members: ['1', '3', '5'],
-      tags: ['后端', '架构']
+      id: 'p3', name: 'API 网关迁移', desc: '迁移至微服务架构，提升可用性',
+      status: 'planning', progress: 12, start: '2026-09-01', end: '2027-02-28',
+      color: '#ff9f0a', icon: '⚙️', members: ['1', '3', '5'], tags: ['后端', '架构']
     },
     {
-      id: 'p4',
-      name: '设计系统 v3',
-      desc: '统一多端设计语言与组件库',
-      status: 'completed',
-      progress: 100,
-      start: '2026-03-01',
-      end: '2026-06-30',
-      color: '#bf5af2',
-      icon: '🎨',
-      members: ['4'],
-      tags: ['设计']
+      id: 'p4', name: '设计系统 v3', desc: '统一多端设计语言与组件库',
+      status: 'completed', progress: 100, start: '2026-03-01', end: '2026-06-30',
+      color: '#bf5af2', icon: '🎨', members: ['4'], tags: ['设计']
     }
   ])
 
   const active = computed(() => projects.value.filter((p) => p.status === 'active'))
+  const hydrate = (list) => { projects.value = list }
 
-  function add(p) {
-    projects.value.push({
-      ...p,
-      id: 'p' + Date.now(),
-      progress: 0,
-      members: [],
-      tags: []
-    })
+  async function add(p) {
+    if (isServerMode()) {
+      try {
+        const d = await api('/projects', { method: 'POST', body: JSON.stringify(p) })
+        projects.value.push(d.project)
+        return
+      } catch (e) {
+        console.error(e)
+      }
+    }
+    projects.value.push({ ...p, id: 'p' + Date.now(), progress: 0, members: [], tags: [] })
   }
 
-  function update(id, patch) {
+  async function update(id, patch) {
     const i = projects.value.findIndex((p) => p.id === id)
     if (i > -1) Object.assign(projects.value[i], patch)
+    if (isServerMode()) {
+      try { await api('/projects/' + id, { method: 'PATCH', body: JSON.stringify(patch) }) } catch (e) { console.error(e) }
+    }
   }
 
-  function remove(id) {
+  async function remove(id) {
     projects.value = projects.value.filter((p) => p.id !== id)
+    if (isServerMode()) {
+      try { await api('/projects/' + id, { method: 'DELETE' }) } catch (e) { console.error(e) }
+    }
   }
 
-  return { projects, active, add, update, remove }
+  return { projects, active, add, update, remove, hydrate }
 })
 
 /* ============ 任务 ============ */
@@ -121,120 +215,77 @@ export const useTasksStore = defineStore('tasks', () => {
     { id: 't12', pid: 'p4', col: 'done', title: '组件库 v1.0', desc: '核心组件开发与文档', priority: 'high', assignee: '2', due: '2026-06-25', tags: ['前端'], order: 1 }
   ])
 
-  function byProject(pid) {
-    return tasks.value.filter((t) => t.pid === pid)
-  }
+  const hydrate = (list) => { tasks.value = list }
+  const byProject = (pid) => tasks.value.filter((t) => t.pid === pid)
+  const byCol = (pid, col) => tasks.value.filter((t) => t.pid === pid && t.col === col).sort((a, b) => a.order - b.order)
 
-  function byCol(pid, col) {
-    return tasks.value
-      .filter((t) => t.pid === pid && t.col === col)
-      .sort((a, b) => a.order - b.order)
-  }
-
-  function add(t) {
-    const maxOrder = Math.max(-1, ...byCol(t.pid, t.col).map((x) => x.order))
-    tasks.value.push({ ...t, id: 't' + Date.now(), order: maxOrder + 1 })
-  }
-
-  function update(id, patch) {
-    const i = tasks.value.findIndex((t) => t.id === id)
-    if (i > -1) Object.assign(tasks.value[i], patch)
-  }
-
-  function remove(id) {
-    tasks.value = tasks.value.filter((t) => t.id !== id)
-  }
-
-  function move(id, col, index) {
+  function localMove(id, col, index) {
     const t = tasks.value.find((x) => x.id === id)
     if (!t) return
     const oldCol = t.col
     const oldOrder = t.order
     const siblings = byCol(t.pid, col)
-
     if (oldCol === col) {
       siblings.forEach((s) => {
         if (s.id === id) return
-        if (oldOrder < index && s.order > oldOrder && s.order < index) update(s.id, { order: s.order - 1 })
-        else if (oldOrder > index && s.order >= index && s.order < oldOrder) update(s.id, { order: s.order + 1 })
+        if (oldOrder < index && s.order > oldOrder && s.order < index) updateLocal(s.id, { order: s.order - 1 })
+        else if (oldOrder > index && s.order >= index && s.order < oldOrder) updateLocal(s.id, { order: s.order + 1 })
       })
     } else {
       byCol(t.pid, oldCol).forEach((s) => {
-        if (s.order > oldOrder) update(s.id, { order: s.order - 1 })
+        if (s.order > oldOrder) updateLocal(s.id, { order: s.order - 1 })
       })
       siblings.forEach((s, i) => {
-        if (i >= index) update(s.id, { order: s.order + 1 })
+        if (i >= index) updateLocal(s.id, { order: s.order + 1 })
       })
     }
-    update(id, { col, order: index })
+    updateLocal(id, { col, order: index })
   }
 
-  return { columns, tasks, byProject, byCol, add, update, remove, move }
-})
+  function updateLocal(id, patch) {
+    const i = tasks.value.findIndex((t) => t.id === id)
+    if (i > -1) Object.assign(tasks.value[i], patch)
+  }
 
-/* ============ 认证 ============ */
-const ACC_KEY = 'pf_accounts'
-const SES_KEY = 'pf_session'
-
-function loadAccounts() {
-  try {
-    const list = JSON.parse(localStorage.getItem(ACC_KEY) || '[]')
-    if (!list.length) {
-      // 预置演示账号 demo@demo.com / 123456
-      const demo = { id: 'u1', name: '林青川', email: 'demo@demo.com', pass: btoa('123456'), avatar: 'https://api.dicebear.com/9.x/notionists/svg?seed=lin' }
-      list.push(demo)
-      localStorage.setItem(ACC_KEY, JSON.stringify(list))
+  async function add(t) {
+    if (isServerMode()) {
+      try {
+        const d = await api('/tasks', { method: 'POST', body: JSON.stringify(t) })
+        tasks.value.push(d.task)
+        return
+      } catch (e) {
+        console.error(e)
+      }
     }
-    return list
-  } catch {
-    return []
-  }
-}
-
-export const useAuthStore = defineStore('auth', () => {
-  const session = ref(JSON.parse(localStorage.getItem(SES_KEY) || 'null'))
-  const accounts = ref(loadAccounts())
-
-  const isAuthed = computed(() => !!session.value)
-
-  function persist() {
-    localStorage.setItem(ACC_KEY, JSON.stringify(accounts.value))
-    if (session.value) localStorage.setItem(SES_KEY, JSON.stringify(session.value))
-    else localStorage.removeItem(SES_KEY)
+    const maxOrder = Math.max(-1, ...byCol(t.pid, t.col).map((x) => x.order))
+    tasks.value.push({ ...t, id: 't' + Date.now(), order: maxOrder + 1 })
   }
 
-  function register(name, email, password) {
-    email = (email || '').trim().toLowerCase()
-    if (!name || !email || !password) return { ok: false, msg: '请填写完整信息' }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, msg: '邮箱格式不正确' }
-    if (password.length < 6) return { ok: false, msg: '密码至少 6 位' }
-    if (accounts.value.some((a) => a.email === email)) return { ok: false, msg: '该邮箱已注册' }
-    const acc = {
-      id: 'u' + Date.now(),
-      name: name.trim(),
-      email,
-      pass: btoa(password),
-      avatar: `https://api.dicebear.com/9.x/notionists/svg?seed=${encodeURIComponent(email)}`
+  async function update(id, patch) {
+    updateLocal(id, patch)
+    if (isServerMode()) {
+      try { await api('/tasks/' + id, { method: 'PATCH', body: JSON.stringify(patch) }) } catch (e) { console.error(e) }
     }
-    accounts.value.push(acc)
-    session.value = { id: acc.id, name: acc.name, email: acc.email, avatar: acc.avatar }
-    persist()
-    return { ok: true }
   }
 
-  function login(email, password) {
-    email = (email || '').trim().toLowerCase()
-    const acc = accounts.value.find((a) => a.email === email)
-    if (!acc || acc.pass !== btoa(password)) return { ok: false, msg: '邮箱或密码错误' }
-    session.value = { id: acc.id, name: acc.name, email: acc.email, avatar: acc.avatar }
-    persist()
-    return { ok: true }
+  async function remove(id) {
+    tasks.value = tasks.value.filter((t) => t.id !== id)
+    if (isServerMode()) {
+      try { await api('/tasks/' + id, { method: 'DELETE' }) } catch (e) { console.error(e) }
+    }
   }
 
-  function logout() {
-    session.value = null
-    persist()
+  async function move(id, col, index) {
+    localMove(id, col, index)
+    if (isServerMode()) {
+      try {
+        const d = await api('/tasks/move', { method: 'POST', body: JSON.stringify({ id, col, index }) })
+        if (d.tasks) tasks.value = d.tasks
+      } catch (e) {
+        console.error(e)
+      }
+    }
   }
 
-  return { session, isAuthed, register, login, logout }
+  return { columns, tasks, byProject, byCol, add, update, remove, move, hydrate }
 })
