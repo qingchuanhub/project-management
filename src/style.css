@@ -52,9 +52,98 @@
   box-sizing: border-box;
 }
 
+/* ============ Mobile Native 基础修复 ============ */
 html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior: none;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* 16px minimum input font size prevents iOS zoom */
+input, textarea, select {
+  font-size: 16px;
+}
+
+/* Touch feedback on controls */
+button, a, [role="button"], .btn, .tappable {
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Hover only on capable devices */
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover,
+  .tappable:hover {
+    /* hover styles go here */
+  }
+}
+
+/* Press feedback - instant on pointer-down */
+.btn:active,
+.tappable:active {
+  transform: scale(0.97);
+  transition: transform 100ms ease-out, background 100ms;
+}
+
+/* Contain scroll to container, prevent page overscroll */
+.scrollable, .scrollable-y {
+  overscroll-behavior: contain;
+}
+
+/* ============ Mobile Native 基础修复结束 ============ */
+
+/* ============ Typography 优化 ============ */
+/* Optical sizing & tracking - Apple style */
+html {
+  font-variant-numeric: tabular-nums; /* numbers align in columns */
+  font-optical-sizing: auto; /* optical sizing for SF Pro */
+  text-rendering: optimizeLegibility;
+}
+
+/* Optical tracking: tighten large headings, near-zero for body */
+h1, h2, h3, h4, h5, h6 {
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+h1 { font-size: clamp(1.75rem, 4vw, 2.5rem); }
+h2 { font-size: clamp(1.5rem, 3vw, 2rem); }
+h3 { font-size: clamp(1.25rem, 2.5vw, 1.5rem); }
+
+/* Body text - near-zero tracking, comfortable leading */
+p, span, div, button, input, textarea, select, label, a {
+  letter-spacing: -0.005em;
+  line-height: 1.5;
+}
+
+/* Small text - slight positive tracking for legibility */
+small, .text-sm, .caption {
+  letter-spacing: 0.01em;
+  line-height: 1.45;
+}
+
+/* Monospace for code/numbers */
+code, pre, kbd, samp, .mono {
+  font-family: 'SF Mono', 'Fira Code', 'Monaco', 'Menlo', monospace;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "cv03" 1, "cv04" 1, "cv11" 1; /* slashed zero, alternate 1, etc. */
+}
+
+/* Tabular numbers for data tables, counts, stats */
+.stat-value, .count, .number, .amount, .metric, [data-tabular] {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "cv03" 1;
+}
+
+/* ============ Typography 优化结束 ============ */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
 body {
@@ -62,7 +151,7 @@ body {
     'Helvetica Neue', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   background: var(--bg);
   color: var(--text);
-  font-size: 14px;
+  font-size: 0.875rem; /* 14px at default 16px root */
   line-height: 1.5;
   overflow: hidden;
 }
@@ -87,18 +176,174 @@ body {
   opacity: 0.7;
 }
 
-/* ============ 毛玻璃 ============ */
+/* ============ Material & Depth: Glass System ============ */
+/* Light glass - for subtle surfaces */
+.glass-light {
+  background: rgba(255, 255, 255, 0.45);
+  backdrop-filter: saturate(160%) blur(12px);
+  -webkit-backdrop-filter: saturate(160%) blur(12px);
+  border: 1px solid var(--border-glass);
+}
+
+/* Standard glass - default UI panels */
 .glass {
   background: var(--bg-card);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
   border: 1px solid var(--border-glass);
 }
+
+/* Strong glass - modal, sidebar, topbar */
 .glass-strong {
   background: var(--bg-card);
   backdrop-filter: saturate(200%) blur(30px);
   -webkit-backdrop-filter: saturate(200%) blur(30px);
   border: 1px solid var(--border-glass);
+}
+
+/* Ultra glass - heavy modal, drawer */
+.glass-ultra {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: saturate(220%) blur(40px);
+  -webkit-backdrop-filter: saturate(220%) blur(40px);
+  border: 1px solid var(--border-glass);
+}
+
+/* Dark mode glass variants */
+.dark .glass-light {
+  background: rgba(28, 28, 30, 0.45);
+}
+.dark .glass,
+.dark .glass-strong {
+  background: var(--bg-card);
+}
+.dark .glass-ultra {
+  background: rgba(28, 28, 30, 0.85);
+}
+
+/* Vibrancy text on glass - higher contrast for readability */
+.glass .text-vibrant,
+.glass-strong .text-vibrant,
+.glass-ultra .text-vibrant {
+  color: var(--text);
+  font-weight: 500;
+  letter-spacing: -0.005em;
+}
+
+/* Secondary text on glass - slightly muted but readable */
+.glass .text-muted,
+.glass-strong .text-muted,
+.glass-ultra .text-muted {
+  color: var(--text-2);
+  font-weight: 400;
+}
+
+/* ============ Shadow System: Context-Aware ============ */
+/* Base shadows */
+:root {
+  /* Light mode */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 20px 50px rgba(0, 0, 0, 0.12);
+  --shadow-xl: 0 32px 64px rgba(0, 0, 0, 0.15);
+  
+  /* Over busy content - stronger separation */
+  --shadow-md-busy: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --shadow-lg-busy: 0 24px 56px rgba(0, 0, 0, 0.16);
+  
+  /* Glass surfaces - subtle but defining */
+  --shadow-glass: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.03);
+  --shadow-glass-lg: 0 4px 12px rgba(0, 0, 0, 0.05), 0 2px 4px rgba(0, 0, 0, 0.02);
+}
+
+/* Dark mode shadows - use opacity-based layers */
+.dark {
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 20px 50px rgba(0, 0, 0, 0.5);
+  --shadow-xl: 0 32px 64px rgba(0, 0, 0, 0.6);
+  --shadow-md-busy: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-lg-busy: 0 24px 56px rgba(0, 0, 0, 0.6);
+  --shadow-glass: 0 1px 3px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.15);
+  --shadow-glass-lg: 0 4px 12px rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* ============ Scroll Edge Effects (替代硬边框) ============ */
+/* Fade mask at scroll edges instead of hard borders */
+.scroll-fade-top::before,
+.scroll-fade-bottom::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 24px;
+  pointer-events: none;
+  z-index: 1;
+}
+.scroll-fade-top::before {
+  top: 0;
+  background: linear-gradient(to bottom, var(--bg-solid), transparent);
+}
+.scroll-fade-bottom::after {
+  bottom: 0;
+  background: linear-gradient(to top, var(--bg-solid), transparent);
+}
+.dark .scroll-fade-top::before {
+  background: linear-gradient(to bottom, var(--bg), transparent);
+}
+.dark .scroll-fade-bottom::after {
+  background: linear-gradient(to top, var(--bg), transparent);
+}
+
+/* Apply to scrollable containers with sticky headers */
+.scroll-container {
+  position: relative;
+}
+.scroll-container .scroll-fade-top::before {
+  background: linear-gradient(to bottom, var(--bg-solid), transparent);
+}
+
+/* ============ Vibrancy: 文本在玻璃上的可读性 ============ */
+/* Primary text on glass - ensure contrast */
+.on-glass {
+  color: var(--text);
+  font-weight: 500;
+}
+.on-glass .secondary {
+  color: var(--text-2);
+  font-weight: 400;
+}
+
+/* ============ Material Layering Rules ============ */
+/* Never stack light translucent on light translucent */
+/* Use: glass-strong over content, glass-light only over solid */
+.glass-over-content {
+  background: var(--bg-card);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border: 1px solid var(--border-glass);
+  box-shadow: var(--shadow-glass);
+}
+.glass-over-content:hover {
+  box-shadow: var(--shadow-glass-lg);
+}
+
+/* ============ Elevated surfaces for modal/drawer ============ */
+.surface-elevated {
+  background: var(--bg-solid);
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--border);
+}
+.dark .surface-elevated {
+  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(255,255,255,0.05);
+}
+
+/* ============ Scroll Edge: 替代 sticky header 下的硬分割线 ============ */
+.sticky-header-shadow {
+  box-shadow: var(--shadow-glass);
+}
+.sticky-header-shadow.scrolled {
+  box-shadow: var(--shadow-glass-lg), 0 1px 0 var(--border);
 }
 
 /* ============ 按钮 ============ */
@@ -350,3 +595,131 @@ textarea.input {
 .empty svg {
   opacity: 0.4;
 }
+
+/* ============ Spring 动效工具 ============ */
+/* Spring 参数 - Apple Design 推荐值 */
+/* Critically damped (no overshoot) - default for most UI */
+:root {
+  --spring-damping-default: 1;
+  --spring-response-default: 0.4;
+  --spring-damping-bounce: 0.8;
+  --spring-response-bounce: 0.3;
+  --spring-damping-gentle: 1;
+  --spring-response-gentle: 0.5;
+}
+
+/* Spring CSS custom properties for JS consumption */
+.spring-default {
+  --spring-damping: var(--spring-damping-default);
+  --spring-response: var(--spring-response-default);
+}
+.spring-bounce {
+  --spring-damping: var(--spring-damping-bounce);
+  --spring-response: var(--spring-response-bounce);
+}
+.spring-gentle {
+  --spring-damping: var(--spring-damping-gentle);
+  --spring-response: var(--spring-response-gentle);
+}
+
+/* ============ 可访问性：减少动效 ============ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* Replace spring animations with instant or cross-fade */
+  .modal,
+  .popover,
+  .sheet,
+  .sidebar,
+  .popover {
+    animation: none !important;
+    transition: opacity 0.15s ease, visibility 0.15s ease !important;
+    transform: none !important;
+  }
+  .fade-enter-active,
+  .fade-leave-active {
+    transition: opacity 0.15s ease !important;
+    transform: none !important;
+  }
+  .fade-enter-from {
+    opacity: 0;
+    transform: none;
+  }
+  .fade-leave-to {
+    opacity: 0;
+    transform: none;
+  }
+  /* Disable background blobs animation */
+  .bg-decor .blob,
+  .glow {
+    animation: none !important;
+  }
+}
+
+/* ============ 可访问性：减少透明度 ============ */
+@media (prefers-reduced-transparency: reduce) {
+  .glass,
+  .glass-strong,
+  .sidebar,
+  .topbar,
+  .toolbar,
+  .modal,
+  .popover {
+    background: var(--bg-solid) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border-color: var(--border) !important;
+  }
+  .dark .glass,
+  .dark .glass-strong {
+    background: var(--bg-solid) !important;
+  }
+}
+
+/* ============ 可访问性：高对比度 ============ */
+@media (prefers-contrast: more) {
+  :root {
+    --border: currentColor;
+    --border-glass: currentColor;
+    --text-2: var(--text);
+    --text-3: var(--text);
+    --shadow-sm: 0 0 0 1px currentColor;
+    --shadow-md: 0 0 0 2px currentColor;
+    --shadow-lg: 0 0 0 3px currentColor;
+  }
+  .dark {
+    --border: currentColor;
+    --border-glass: currentColor;
+  }
+  .glass,
+  .glass-strong {
+    background: var(--bg-solid) !important;
+    backdrop-filter: none !important;
+    border-width: 2px !important;
+  }
+  .btn-primary,
+  .btn-danger {
+    border: 2px solid currentColor;
+  }
+  .input:focus {
+    box-shadow: 0 0 0 3px currentColor;
+  }
+}
+
+/* ============ 动效缓动曲线 ============ */
+:root {
+  /* Apple standard easing curves */
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);        /* standard */
+  --ease-accelerate: cubic-bezier(0.4, 0, 1, 1);        /* accelerate */
+  --ease-decelerate: cubic-bezier(0, 0, 0.2, 1);        /* decelerate */
+  --ease-spring-standard: var(--ease-decelerate);       /* spring-like */
+  --ease-spring-bounce: cubic-bezier(0.34, 1.56, 0.64, 1); /* bounce */
+}
+
+/* ============ 动效缓动结束 ============ */

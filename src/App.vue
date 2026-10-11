@@ -6,11 +6,13 @@ import {
   Users, BarChart3, Settings, Search, Bell, Sun, Moon,
   Menu, X, Plus, LogOut, User as UserIcon, ChevronLeft, ChevronRight
 } from 'lucide-vue-next'
-import { useAuthStore } from './store'
+import { useAuthStore, useBreakStore } from './store'
+import DataToggle from './components/DataToggle.vue'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const breakStore = useBreakStore()
 
 const collapsed = ref(false)
 const mobileOpen = ref(false)
@@ -118,6 +120,9 @@ function logout() {
         </form>
 
         <div class="acts">
+          <!-- 数据源切换（开发模式） -->
+          <DataToggle v-model="breakStore.mode" v-if="breakStore.isDev" />
+
           <!-- 通知 -->
           <div class="pop-wrap">
             <button class="btn btn-icon btn-ghost" @click="showBell = !showBell; showUser = false">
@@ -182,10 +187,15 @@ function logout() {
 <style scoped>
 .app {
   display: flex;
-  height: 100vh;
+  height: 100dvh;
   background: var(--bg);
   position: relative;
   overflow: hidden;
+  /* Safe area insets for notch/Dynamic Island/home indicator */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 /* ---- 装饰背景光晕 ---- */

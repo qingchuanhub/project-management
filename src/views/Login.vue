@@ -144,6 +144,12 @@ function demo() {
   overflow: hidden;
   padding: 24px;
   z-index: 999;
+  height: 100dvh;
+  /* Safe area insets */
+  padding-top: calc(24px + env(safe-area-inset-top));
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  padding-left: calc(24px + env(safe-area-inset-left));
+  padding-right: calc(24px + env(safe-area-inset-right));
 }
 /* 彩色光晕背景 */
 .glow {

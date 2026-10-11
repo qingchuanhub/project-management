@@ -309,3 +309,58 @@ export const useTasksStore = defineStore('tasks', () => {
 
   return { columns, tasks, byProject, byCol, add, update, remove, move, hydrate }
 })
+
+/* ============ Break UI: 最坏数据测试 ============ */
+import { worstCaseData, demoData, emptyData, oneData, thousandData, DATA_MODES, getDataByMode } from './break-data'
+
+export const useBreakStore = defineStore('break', () => {
+  const mode = ref('demo')
+  const isDev = ref(import.meta.env.DEV)
+
+  const modes = DATA_MODES
+  const labels = {
+    demo: '演示数据',
+    worst: '最坏情况',
+    empty: '空数据',
+    one: '单条数据',
+    thousand: '千条数据'
+  }
+
+  function setMode(m) {
+    if (modes.includes(m)) {
+      mode.value = m
+      applyData()
+    }
+  }
+
+  function applyData() {
+    const data = getDataByMode(mode.value)
+    // 使用动态导入避免循环依赖
+    import('./store.js').then(({ useUsersStore, useProjectsStore, useTasksStore }) => {
+      const usersStore = useUsersStore()
+      const projectsStore = useProjectsStore()
+      const tasksStore = useTasksStore()
+      usersStore.hydrate(data.users)
+      projectsStore.hydrate(data.projects)
+      tasksStore.hydrate(data.tasks)
+    })
+  }
+
+  function reset() {
+    mode.value = 'demo'
+    applyData()
+  }
+
+  // 初始化时应用当前模式
+  if (isDev.value) {
+    // 从 URL 参数恢复模式
+    const urlParams = new URLSearchParams(window.location.search)
+    const urlMode = urlParams.get('data')
+    if (urlMode && DATA_MODES.includes(urlMode)) {
+      mode.value = urlMode
+    }
+    applyData()
+  }
+
+  return { mode, modes, labels, isDev, setMode, reset, applyData }
+})
